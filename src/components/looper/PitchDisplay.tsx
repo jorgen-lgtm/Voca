@@ -55,23 +55,6 @@ export function PitchDisplay({ pitch, isRecording }: PitchDisplayProps) {
                 </div>
               </div>
             </motion.div>
-          ) : pitch?.frequency ? (
-            <motion.div
-              key="detecting"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-3 text-gray-400"
-            >
-              <div className="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-yellow-500/50 rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min((pitch.clarity || 0) * 100, 100)}%` }}
-                  transition={{ duration: 0.1 }}
-                />
-              </div>
-              <span className="text-sm">Hold steady...</span>
-            </motion.div>
           ) : (
             <motion.div
               key="listening"

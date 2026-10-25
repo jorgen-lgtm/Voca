@@ -261,75 +261,94 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       </AnimatePresence>
 
       {/* Loop Rings */}
-      <div className="relative flex items-center justify-center my-8">
-        <motion.div
-          className="absolute rounded-full border border-gray-700/30"
-          style={{ width: 320, height: 320 }}
-          animate={{
-            borderColor: state.isRecording
-              ? ['rgba(239,68,68,0.3)', 'rgba(239,68,68,0.6)', 'rgba(239,68,68,0.3)']
-              : 'rgba(55,65,81,0.3)',
-          }}
-          transition={{
-            duration: 1,
-            repeat: state.isRecording ? Infinity : 0,
-          }}
-        />
-
-        {loops.map((loop, index) => (
-          <LoopRing
-            key={loop.id}
-            loop={loop}
-            index={index}
-            isPlaying={state.isPlaying}
-            tempo={state.tempo}
-            isSelected={selectedLoopId === loop.id}
-            onSelect={() => setSelectedLoopId(selectedLoopId === loop.id ? null : loop.id)}
-            onDelete={() => deleteLoop(loop.id)}
-          />
-        ))}
-
-        {/* Loop progress ring - shows when recording to existing loop length */}
-        {state.isRecording && masterLoopDuration && (
-          <svg
-            className="absolute w-36 h-36 -rotate-90"
-            viewBox="0 0 100 100"
+      {(() => {
+        // Calculate container size based on number of loops
+        // Each loop ring has baseRadius = 100 + index * 35
+        const maxLoopIndex = Math.max(0, loops.length - 1)
+        const maxRingRadius = 100 + maxLoopIndex * 35
+        const strokeWidth = 8
+        const containerSize = Math.max(320, (maxRingRadius + strokeWidth) * 2 + 20)
+        
+        return (
+          <div 
+            className="relative flex items-center justify-center my-8"
+            style={{ 
+              width: containerSize, 
+              height: containerSize,
+              minWidth: 320,
+              minHeight: 320,
+            }}
           >
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              fill="none"
-              stroke="rgba(168, 85, 247, 0.3)"
-              strokeWidth="4"
+            <motion.div
+              className="absolute rounded-full border border-gray-700/30"
+              style={{ width: 320, height: 320 }}
+              animate={{
+                borderColor: state.isRecording
+                  ? ['rgba(239,68,68,0.3)', 'rgba(239,68,68,0.6)', 'rgba(239,68,68,0.3)']
+                  : 'rgba(55,65,81,0.3)',
+              }}
+              transition={{
+                duration: 1,
+                repeat: state.isRecording ? Infinity : 0,
+              }}
             />
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              fill="none"
-              stroke="rgb(168, 85, 247)"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeDasharray={`${loopProgress * 289} 289`}
-              className="transition-all duration-100"
-            />
-          </svg>
-        )}
 
-        <RecordButton
-          isRecording={state.isRecording}
-          isInitialized={state.isInitialized}
-          onPress={canAddMoreLoops ? startRecording : undefined}
-          onRelease={stopRecording}
-          onInitialize={initializeAudio}
-          disabled={loopsAtLimit && state.isInitialized}
-        />
-      </div>
+            {loops.map((loop, index) => (
+              <LoopRing
+                key={loop.id}
+                loop={loop}
+                index={index}
+                isPlaying={state.isPlaying}
+                tempo={state.tempo}
+                isSelected={selectedLoopId === loop.id}
+                onSelect={() => setSelectedLoopId(selectedLoopId === loop.id ? null : loop.id)}
+                onDelete={() => deleteLoop(loop.id)}
+              />
+            ))}
+
+            {/* Loop progress ring - shows when recording to existing loop length */}
+            {state.isRecording && masterLoopDuration && (
+              <svg
+                className="absolute w-36 h-36 -rotate-90"
+                viewBox="0 0 100 100"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="rgba(168, 85, 247, 0.3)"
+                  strokeWidth="4"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="46"
+                  fill="none"
+                  stroke="rgb(168, 85, 247)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={`${loopProgress * 289} 289`}
+                  className="transition-all duration-100"
+                />
+              </svg>
+            )}
+
+            <RecordButton
+              isRecording={state.isRecording}
+              isInitialized={state.isInitialized}
+              onPress={canAddMoreLoops ? startRecording : undefined}
+              onRelease={stopRecording}
+              onInitialize={initializeAudio}
+              disabled={loopsAtLimit && state.isInitialized}
+            />
+          </div>
+        )
+      })()}
 
       {/* Master loop indicator */}
       {masterLoopDuration && !state.isRecording && (
-        <div className="text-center text-sm text-purple-400 mb-2">
+        <div className="text-center text-sm text-purple-400 mb-2 relative z-10">
           Loop length: {masterLoopDuration.toFixed(1)}s
           <span className="text-gray-500 ml-2">
             (set by first track)
@@ -340,7 +359,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       {/* Loop Editor Panel */}
       <AnimatePresence>
         {selectedLoop && (
-          <div className="mb-4">
+          <div className="mb-4 relative z-10">
             <LoopEditor
               loop={selectedLoop}
               isPlaying={state.isPlaying}
@@ -358,7 +377,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Drum Pads */}
       {currentInstrument === 'drums' && !selectedLoop && (
-        <div className="mb-6">
+        <div className="mb-6 relative z-10">
           <DrumPads
             isRecording={state.isRecording}
             lastDrumType={lastDrumType}
@@ -369,7 +388,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Mini Keyboard for melodic instruments */}
       {currentInstrument !== 'drums' && !selectedLoop && (
-        <div className="mb-6">
+        <div className="mb-6 relative z-10">
           <MiniKeyboard
             isRecording={state.isRecording}
             onNotePlay={(note) => triggerNote(note, 0.3)}
@@ -381,16 +400,18 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Instrument Selector */}
       {!selectedLoop && (
-        <InstrumentSelector
-          currentInstrument={currentInstrument}
-          onSelect={setCurrentInstrument}
-          onCycle={cycleInstrument}
-          loadingInstruments={loadingInstruments}
-        />
+        <div className="relative z-10">
+          <InstrumentSelector
+            currentInstrument={currentInstrument}
+            onSelect={setCurrentInstrument}
+            onCycle={cycleInstrument}
+            loadingInstruments={loadingInstruments}
+          />
+        </div>
       )}
 
       {/* Metronome */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 relative z-10">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}

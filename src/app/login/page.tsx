@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 
 type AuthMode = 'login' | 'signup'
@@ -12,7 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<AuthMode>('login')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -31,26 +32,37 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setMessage({ type: 'error', text: error.message })
+        if (error.message.includes('rate limit') || error.message.includes('exceeded') || error.message.includes('too many')) {
+          setMessage({ 
+            type: 'info', 
+            text: '⚠️ Email-gränsen är nådd (max 2/timme). Använd appen som gäst istället, eller vänta och försök igen.' 
+          })
+        } else {
+          setMessage({ type: 'error', text: error.message })
+        }
       } else if (data.user && !data.session) {
         // Email confirmation required - try to log in anyway
-        // Some Supabase configs allow this
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (signInError) {
-          // If login fails, email confirmation is required
-          setMessage({ type: 'success', text: 'Account created! Check your email to verify, or try logging in.' })
+          if (signInError.message.includes('Email not confirmed')) {
+            setMessage({ 
+              type: 'info', 
+              text: '📧 Konto skapat! Kolla din email för verifiering. Tips: Använd appen som gäst medan du väntar.' 
+            })
+          } else {
+            setMessage({ type: 'success', text: 'Konto skapat! Försök logga in.' })
+          }
           setMode('login')
         } else {
           router.push('/')
         }
       } else if (data.session) {
-        // Auto-logged in after signup
         router.push('/')
       } else {
-        setMessage({ type: 'success', text: 'Account created! You can now log in.' })
+        setMessage({ type: 'success', text: 'Konto skapat! Du kan nu logga in.' })
         setMode('login')
         setPassword('')
       }
@@ -61,11 +73,10 @@ export default function LoginPage() {
       })
 
       if (error) {
-        // Provide more helpful error messages
         if (error.message.includes('Invalid login credentials')) {
-          setMessage({ type: 'error', text: 'Wrong email or password. If you just signed up, check your email for verification.' })
+          setMessage({ type: 'error', text: 'Fel email eller lösenord.' })
         } else if (error.message.includes('Email not confirmed')) {
-          setMessage({ type: 'error', text: 'Please verify your email first. Check your inbox for a confirmation link.' })
+          setMessage({ type: 'info', text: '📧 Verifiera din email först. Kolla inkorgen (kan ta tid pga mailbegränsningar).' })
         } else {
           setMessage({ type: 'error', text: error.message })
         }
@@ -120,7 +131,7 @@ export default function LoginPage() {
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Log In
+              Logga in
             </button>
             <button
               type="button"
@@ -131,7 +142,7 @@ export default function LoginPage() {
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Sign Up
+              Skapa konto
             </button>
           </div>
 
@@ -145,7 +156,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
+                placeholder="din@email.se"
                 required
                 className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
               />
@@ -153,14 +164,14 @@ export default function LoginPage() {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                Password
+                Lösenord
               </label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+                placeholder={mode === 'signup' ? 'Minst 6 tecken' : 'Ditt lösenord'}
                 required
                 minLength={6}
                 className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
@@ -174,7 +185,10 @@ export default function LoginPage() {
               whileTap={{ scale: loading ? 1 : 0.98 }}
               className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {loading ? (mode === 'signup' ? 'Creating account...' : 'Logging in...') : (mode === 'signup' ? 'Create Account' : 'Log In')}
+              {loading 
+                ? (mode === 'signup' ? 'Skapar konto...' : 'Loggar in...') 
+                : (mode === 'signup' ? 'Skapa konto' : 'Logga in')
+              }
             </motion.button>
           </form>
 
@@ -185,22 +199,43 @@ export default function LoginPage() {
               className={`mt-4 p-3 rounded-lg text-sm ${
                 message.type === 'success'
                   ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                  : message.type === 'info'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                   : 'bg-red-500/20 text-red-300 border border-red-500/30'
               }`}
             >
               {message.text}
             </motion.div>
           )}
+
+          {/* Guest mode link */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Link
+              href="/"
+              className="block w-full py-3 px-4 text-center bg-gray-700/50 hover:bg-gray-700 text-gray-300 hover:text-white font-medium rounded-xl transition-all"
+            >
+              🎵 Fortsätt utan konto
+            </Link>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Du kan använda alla funktioner utan att logga in
+            </p>
+          </div>
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-6">
-          {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
+          {mode === 'signup' ? 'Har du redan konto? ' : 'Inget konto? '}
           <button
             onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
             className="text-purple-400 hover:text-purple-300"
           >
-            {mode === 'signup' ? 'Log in' : 'Sign up'}
+            {mode === 'signup' ? 'Logga in' : 'Skapa konto'}
           </button>
+        </p>
+
+        {/* Info about email limits */}
+        <p className="text-center text-gray-600 text-xs mt-4 max-w-xs mx-auto">
+          Obs: Verifieringsmail kan ta tid att skickas pga systemets begränsningar. 
+          Använd gärna appen som gäst!
         </p>
       </motion.div>
     </div>

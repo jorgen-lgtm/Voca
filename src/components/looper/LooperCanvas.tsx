@@ -306,13 +306,13 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           state.isRecording ? (
             <>
               <span className="text-red-500">●</span> Recording...
-              {state.metronomeEnabled && ' • Metronom aktiv'}
+              {state.metronomeEnabled && ' • 🎧 Använd hörlurar'}
             </>
           ) : (
             <>
               <span className="text-green-500">●</span> Audio ready •{' '}
               {loops.length} {loops.length === 1 ? 'loop' : 'loops'}
-              {state.metronomeEnabled && ' • Metronom aktiv'}
+              {state.metronomeEnabled && ' • 🎧 Hörlurar rekommenderas'}
             </>
           )
         ) : (

@@ -110,6 +110,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const metronomeSynthRef = useRef<Tone.Synth | null>(null)
   const metronomeLoopRef = useRef<Tone.Loop | null>(null)
   const metronomeEnabledRef = useRef<boolean>(false)
+  const metronomeTickTimeRef = useRef<number>(0)
+  const METRONOME_DEAF_PERIOD = 0.08
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -158,9 +160,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       metronomeSynthRef.current = new Tone.Synth({
         oscillator: { type: 'triangle' },
-        envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+        envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
       }).toDestination()
-      metronomeSynthRef.current.volume.value = -6
+      metronomeSynthRef.current.volume.value = -12
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
       instruments.forEach((type) => {
@@ -190,6 +192,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const detectPitch = useCallback(() => {
     if (!analyserRef.current || !audioContextRef.current) {
+      return null
+    }
+
+    const currentTime = Tone.now()
+    if (metronomeEnabledRef.current && currentTime - metronomeTickTimeRef.current < METRONOME_DEAF_PERIOD) {
       return null
     }
 
@@ -270,6 +277,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return false
     }
 
+    const currentTime = Tone.now()
+    if (metronomeEnabledRef.current && currentTime - metronomeTickTimeRef.current < METRONOME_DEAF_PERIOD) {
+      return false
+    }
+
     const bufferLength = analyserRef.current.fftSize
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
@@ -283,7 +295,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const prevRms = prevRmsRef.current
     prevRmsRef.current = rms
 
-    const currentTime = Tone.now()
     const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
     const minTimeBetweenHits = 0.08
 
@@ -541,9 +552,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       let beatCount = 0
       metronomeLoopRef.current = new Tone.Loop((time) => {
         if (metronomeSynthRef.current && metronomeEnabledRef.current) {
+          metronomeTickTimeRef.current = time
           const isDownbeat = beatCount % 4 === 0
           const note = isDownbeat ? 'C6' : 'G5'
-          metronomeSynthRef.current.triggerAttackRelease(note, '32n', time)
+          metronomeSynthRef.current.triggerAttackRelease(note, '64n', time)
         }
         beatCount++
       }, '4n')

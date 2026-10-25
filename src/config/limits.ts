@@ -1,6 +1,7 @@
+// Pro features temporarily disabled - everyone gets full access
 export const FREE_LIMITS = {
-  MAX_CONCURRENT_LOOPS: 4,
-  MAX_PROJECTS: 5,
+  MAX_CONCURRENT_LOOPS: Infinity,
+  MAX_PROJECTS: Infinity,
 } as const
 
 export const PRO_LIMITS = {
@@ -8,10 +9,10 @@ export const PRO_LIMITS = {
   MAX_PROJECTS: Infinity,
 } as const
 
-export function getMaxLoops(isPro: boolean): number {
-  return isPro ? PRO_LIMITS.MAX_CONCURRENT_LOOPS : FREE_LIMITS.MAX_CONCURRENT_LOOPS
+export function getMaxLoops(_isPro: boolean): number {
+  return Infinity // All features free for now
 }
 
-export function getMaxProjects(isPro: boolean): number {
-  return isPro ? PRO_LIMITS.MAX_PROJECTS : FREE_LIMITS.MAX_PROJECTS
+export function getMaxProjects(_isPro: boolean): number {
+  return Infinity // All features free for now
 }

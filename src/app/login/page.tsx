@@ -1,65 +1,53 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 
-const COOLDOWN_SECONDS = 60
+type AuthMode = 'login' | 'signup'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState<AuthMode>('login')
   const [loading, setLoading] = useState(false)
-  const [cooldown, setCooldown] = useState(0)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const supabase = createClient()
+  const router = useRouter()
 
-  useEffect(() => {
-    const lastSent = localStorage.getItem('lastMagicLinkSent')
-    if (lastSent) {
-      const elapsed = Math.floor((Date.now() - parseInt(lastSent)) / 1000)
-      if (elapsed < COOLDOWN_SECONDS) {
-        setCooldown(COOLDOWN_SECONDS - elapsed)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (cooldown > 0) {
-      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [cooldown])
-
-  const handleMagicLink = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (cooldown > 0) {
-      setMessage({ type: 'error', text: `Please wait ${cooldown} seconds before requesting another link.` })
-      return
-    }
-    
     setLoading(true)
     setMessage(null)
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
+    if (mode === 'signup') {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
 
-    if (error) {
-      if (error.message.includes('rate') || error.status === 429) {
-        setMessage({ type: 'error', text: 'Too many requests. Please wait a minute and try again.' })
-        setCooldown(60)
-        localStorage.setItem('lastMagicLinkSent', Date.now().toString())
-      } else {
+      if (error) {
         setMessage({ type: 'error', text: error.message })
+      } else {
+        setMessage({ type: 'success', text: 'Account created! You can now log in.' })
+        setMode('login')
+        setPassword('')
       }
     } else {
-      setMessage({ type: 'success', text: 'Check your email for the login link! (May take a minute)' })
-      setCooldown(COOLDOWN_SECONDS)
-      localStorage.setItem('lastMagicLinkSent', Date.now().toString())
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        setMessage({ type: 'error', text: error.message })
+      } else {
+        router.push('/')
+      }
     }
     setLoading(false)
   }
@@ -98,10 +86,35 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-8 border border-gray-700/50">
-          <form onSubmit={handleMagicLink} className="space-y-4">
+          <div className="flex mb-6 bg-gray-700/50 rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mode === 'login'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Log In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('signup')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mode === 'signup'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
+                Email
               </label>
               <input
                 id="email"
@@ -114,14 +127,30 @@ export default function LoginPage() {
               />
             </div>
 
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+                required
+                minLength={6}
+                className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+              />
+            </div>
+
             <motion.button
               type="submit"
-              disabled={loading || cooldown > 0}
-              whileHover={{ scale: loading || cooldown > 0 ? 1 : 1.02 }}
-              whileTap={{ scale: loading || cooldown > 0 ? 1 : 0.98 }}
+              disabled={loading}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
               className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {loading ? 'Sending...' : cooldown > 0 ? `Wait ${cooldown}s` : 'Send Magic Link'}
+              {loading ? (mode === 'signup' ? 'Creating account...' : 'Logging in...') : (mode === 'signup' ? 'Create Account' : 'Log In')}
             </motion.button>
           </form>
 
@@ -141,7 +170,13 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy.
+          {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
+          <button
+            onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+            className="text-purple-400 hover:text-purple-300"
+          >
+            {mode === 'signup' ? 'Log in' : 'Sign up'}
+          </button>
         </p>
       </motion.div>
     </div>

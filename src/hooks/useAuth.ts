@@ -77,10 +77,8 @@ export function useAuth() {
     await supabase.auth.signOut()
   }
 
-  const isPro = shouldGrantProStatus(
-    state.user?.email,
-    state.profile?.pro_status ?? false
-  )
+  // Pro features temporarily disabled - everyone gets full access
+  const isPro = true
   
   const isAdmin = isAdminEmail(state.user?.email)
 

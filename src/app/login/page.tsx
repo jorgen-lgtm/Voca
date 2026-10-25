@@ -22,7 +22,7 @@ export default function LoginPage() {
     setMessage(null)
 
     if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -32,6 +32,23 @@ export default function LoginPage() {
 
       if (error) {
         setMessage({ type: 'error', text: error.message })
+      } else if (data.user && !data.session) {
+        // Email confirmation required - try to log in anyway
+        // Some Supabase configs allow this
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (signInError) {
+          // If login fails, email confirmation is required
+          setMessage({ type: 'success', text: 'Account created! Check your email to verify, or try logging in.' })
+          setMode('login')
+        } else {
+          router.push('/')
+        }
+      } else if (data.session) {
+        // Auto-logged in after signup
+        router.push('/')
       } else {
         setMessage({ type: 'success', text: 'Account created! You can now log in.' })
         setMode('login')
@@ -44,7 +61,14 @@ export default function LoginPage() {
       })
 
       if (error) {
-        setMessage({ type: 'error', text: error.message })
+        // Provide more helpful error messages
+        if (error.message.includes('Invalid login credentials')) {
+          setMessage({ type: 'error', text: 'Wrong email or password. If you just signed up, check your email for verification.' })
+        } else if (error.message.includes('Email not confirmed')) {
+          setMessage({ type: 'error', text: 'Please verify your email first. Check your inbox for a confirmation link.' })
+        } else {
+          setMessage({ type: 'error', text: error.message })
+        }
       } else {
         router.push('/')
       }

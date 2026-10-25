@@ -101,6 +101,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const isRecordingRef = useRef<boolean>(false)
   const lastDetectedPitchRef = useRef<number | null>(null)
   const pitchStabilityCountRef = useRef<number>(0)
+  const wasPlayingBeforeRecordRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
 
@@ -251,12 +252,18 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const startRecording = useCallback(() => {
     if (!state.isInitialized) return
 
+    wasPlayingBeforeRecordRef.current = state.isPlaying
+    if (state.isPlaying) {
+      const transport = Tone.getTransport()
+      transport.pause()
+    }
+
     recordingNotesRef.current = []
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
     isRecordingRef.current = true
 
-    setState((prev) => ({ ...prev, isRecording: true }))
+    setState((prev) => ({ ...prev, isRecording: true, isPlaying: false }))
 
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
@@ -324,6 +331,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const recordingDuration = Tone.now() - recordingStartTimeRef.current
 
     if (recordingNotesRef.current.length === 0) {
+      if (wasPlayingBeforeRecordRef.current) {
+        const transport = Tone.getTransport()
+        transport.start()
+        setState((prev) => ({ ...prev, isPlaying: true }))
+      }
       return null
     }
 
@@ -336,8 +348,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     setLoops((prev) => [...prev, newLoop])
+    
     return newLoop
-  }, [state.isRecording, currentInstrument])
+  }, [currentInstrument])
 
   const startPlayback = useCallback(() => {
     if (loops.length === 0) return

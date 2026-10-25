@@ -66,49 +66,70 @@ export default function HelpPage() {
 
           {/* Instruments */}
           <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-4 text-purple-300">🎹 Instruments</h2>
-            <div className="grid md:grid-cols-2 gap-4">
+            <h2 className="text-2xl font-semibold mb-4 text-purple-300">🎹 Instruments (9 total)</h2>
+            <div className="grid md:grid-cols-3 gap-4">
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🥁</span>
                   <span className="font-semibold">Drums</span>
                 </div>
-                <p className="text-gray-400 text-sm">Tap the drum pads (Kick, Snare, Hi-Hat) to create beats. Heavy bass kick for punchy rhythms.</p>
+                <p className="text-gray-400 text-sm">Tap the drum pads for Kick, Snare, Hi-Hat. Heavy bass kick!</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🎸</span>
                   <span className="font-semibold">Bass</span>
                 </div>
-                <p className="text-gray-400 text-sm">Deep, punchy bass with sub frequencies. Perfect for laying down the foundation.</p>
+                <p className="text-gray-400 text-sm">Deep, punchy bass with sub frequencies.</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🎹</span>
                   <span className="font-semibold">Piano</span>
                 </div>
-                <p className="text-gray-400 text-sm">Rich piano with harmonics and subtle chorus. Great for melodies and chords.</p>
+                <p className="text-gray-400 text-sm">Rich piano with harmonics and chorus.</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🎸</span>
                   <span className="font-semibold">Guitar</span>
                 </div>
-                <p className="text-gray-400 text-sm">Warm acoustic guitar tone with natural decay.</p>
-              </div>
-              <div className="bg-gray-800/50 rounded-xl p-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-2xl">🗣️</span>
-                  <span className="font-semibold">Voice/Speech Mode</span>
-                </div>
-                <p className="text-gray-400 text-sm">Speak naturally and the melody follows your intonation. Voice up = note up, voice down = note down.</p>
+                <p className="text-gray-400 text-sm">Warm acoustic guitar tone.</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">🎻</span>
                   <span className="font-semibold">Strings</span>
                 </div>
-                <p className="text-gray-400 text-sm">Lush orchestral strings with beautiful sustain.</p>
+                <p className="text-gray-400 text-sm">Lush orchestral strings.</p>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎺</span>
+                  <span className="font-semibold">Brass</span>
+                </div>
+                <p className="text-gray-400 text-sm">Bold brass section sound.</p>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎛️</span>
+                  <span className="font-semibold">Synth</span>
+                </div>
+                <p className="text-gray-400 text-sm">Modern synthesizer tones.</p>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎵</span>
+                  <span className="font-semibold">Organ</span>
+                </div>
+                <p className="text-gray-400 text-sm">Classic organ with warmth.</p>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🗣️</span>
+                  <span className="font-semibold">Voice Mode</span>
+                </div>
+                <p className="text-gray-400 text-sm">Speak and melody follows your intonation!</p>
               </div>
             </div>
           </section>
@@ -152,6 +173,10 @@ export default function HelpPage() {
             <h2 className="text-2xl font-semibold mb-4 text-purple-300">✨ Features</h2>
             <div className="space-y-4">
               <div className="bg-gray-800/50 rounded-xl p-4">
+                <h3 className="font-semibold text-lg mb-2">🎤 Mic Toggle</h3>
+                <p className="text-gray-400">Toggle the microphone on/off at the top of the screen. Turn it off to use only the keyboard for input - useful if pitch detection isn&apos;t working well on your device.</p>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
                 <h3 className="font-semibold text-lg mb-2">🎚️ Loop Controls</h3>
                 <p className="text-gray-400">Click on any loop ring to:</p>
                 <ul className="text-gray-400 ml-6 mt-2 list-disc">
@@ -168,66 +193,24 @@ export default function HelpPage() {
                 <h3 className="font-semibold text-lg mb-2">🤖 AI Assistant</h3>
                 <p className="text-gray-400">Use AI to enhance your loops: quantize notes to the beat, smooth melodies, and snap to musical scales.</p>
               </div>
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <h3 className="font-semibold text-lg mb-2">💾 Export</h3>
+                <p className="text-gray-400">Export your creations as MIDI files (works in any DAW) or JSON format. Click the Export button in the transport controls.</p>
+              </div>
             </div>
           </section>
 
-          {/* Pro Features */}
+          {/* Account */}
           <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-4 text-pink-400">⭐ Pro Features</h2>
-            <div className="bg-gradient-to-br from-purple-900/50 to-pink-900/50 rounded-2xl p-6 border border-purple-500/30">
-              <p className="text-lg mb-6">Upgrade to Pro to unlock the full potential of HumWeave:</p>
-              
-              <div className="grid md:grid-cols-2 gap-4 mb-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Unlimited Projects</h3>
-                    <p className="text-gray-400 text-sm">Save as many projects as you want (Free: 3 projects)</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Export to WAV/MP3</h3>
-                    <p className="text-gray-400 text-sm">Download your creations as audio files</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Export to MIDI</h3>
-                    <p className="text-gray-400 text-sm">Use your loops in any DAW or music software</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Unlimited Loops</h3>
-                    <p className="text-gray-400 text-sm">Layer as many tracks as you need (Free: 4 loops)</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Advanced AI Tools</h3>
-                    <p className="text-gray-400 text-sm">More AI features for music enhancement</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-green-400 text-xl">✓</span>
-                  <div>
-                    <h3 className="font-semibold">Priority Support</h3>
-                    <p className="text-gray-400 text-sm">Get help when you need it</p>
-                  </div>
-                </div>
-              </div>
-
-              <Link
-                href="/upgrade"
-                className="inline-block px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl font-semibold hover:from-purple-500 hover:to-pink-500 transition-all shadow-lg shadow-purple-500/30"
-              >
-                Upgrade to Pro →
-              </Link>
+            <h2 className="text-2xl font-semibold mb-4 text-purple-300">👤 Account</h2>
+            <div className="bg-gray-800/50 rounded-2xl p-6">
+              <p className="text-gray-300 mb-4">Create a free account to save your projects:</p>
+              <ul className="text-gray-400 space-y-2">
+                <li className="flex gap-3"><span>📧</span> Sign up with email and password</li>
+                <li className="flex gap-3"><span>💾</span> Save unlimited projects</li>
+                <li className="flex gap-3"><span>🔄</span> Access your projects from any device</li>
+                <li className="flex gap-3"><span>📤</span> Export to MIDI and JSON</li>
+              </ul>
             </div>
           </section>
 
@@ -240,6 +223,8 @@ export default function HelpPage() {
               <p className="flex gap-3"><span>🗣️</span> <span className="text-gray-300">In Voice mode, exaggerate your intonation for better results.</span></p>
               <p className="flex gap-3"><span>⌨️</span> <span className="text-gray-300">Use the computer keyboard for precise note control.</span></p>
               <p className="flex gap-3"><span>🔇</span> <span className="text-gray-300">Turn off the mic and use only the keyboard if pitch detection isn&apos;t working well.</span></p>
+              <p className="flex gap-3"><span>📱</span> <span className="text-gray-300">On mobile, make sure to allow microphone access when prompted.</span></p>
+              <p className="flex gap-3"><span>🎧</span> <span className="text-gray-300">Use the on-screen mini keyboard on mobile for best results.</span></p>
             </div>
           </section>
 

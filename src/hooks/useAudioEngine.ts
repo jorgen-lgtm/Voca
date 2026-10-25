@@ -34,31 +34,34 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
   // Limiter to prevent clipping
   const drumLimiter = new Tone.Limiter(-6).connect(masterVolume)
   
-  // Clean kick drum
+  // All drums normalized to similar perceived loudness
+  const drumBaseVolume = -12
+  
+  // Kick drum
   const kick = new Tone.MembraneSynth({
     pitchDecay: 0.05,
-    octaves: 6,
+    octaves: 5,
     oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.4 },
+    envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.3 },
   }).connect(drumLimiter)
-  kick.volume.value = -4
+  kick.volume.value = drumBaseVolume
 
-  // Clean snare
+  // Snare
   const snare = new Tone.NoiseSynth({
     noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 },
   }).connect(drumLimiter)
-  snare.volume.value = -10
+  snare.volume.value = drumBaseVolume - 2
 
-  // Clean hi-hat
+  // Hi-hat
   const hihat = new Tone.MetalSynth({
-    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.03 },
+    envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.02 },
     harmonicity: 5.1,
-    modulationIndex: 20,
+    modulationIndex: 16,
     resonance: 4000,
     octaves: 1,
   }).connect(drumLimiter)
-  hihat.volume.value = -14
+  hihat.volume.value = drumBaseVolume - 4
 
   return { kick, snare, hihat }
 }
@@ -70,94 +73,97 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
   const limiter = new Tone.Limiter(-3).connect(masterVolume)
   const reverb = new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(limiter)
   
+  // All instruments normalized to -12 dB baseline
+  const baseVolume = -12
+  
   switch (type) {
     case 'bass': {
-      // Clean bass
-      const bassFilter = new Tone.Filter(600, 'lowpass').connect(reverb)
+      // Deep bass with filter
+      const bassFilter = new Tone.Filter(500, 'lowpass').connect(reverb)
       const synth = new Tone.MonoSynth({
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.4 },
-        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.4, baseFrequency: 200, octaves: 2 },
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.01, decay: 0.3, sustain: 0.4, release: 0.3 },
+        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.3, baseFrequency: 150, octaves: 2 },
       }).connect(bassFilter)
-      synth.volume.value = -6
+      synth.volume.value = baseVolume
       return synth as unknown as InstrumentSynth
     }
     case 'piano': {
-      // Clean piano
+      // Bright piano with fast attack and long decay
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 8
       synth.set({
         oscillator: { type: 'triangle' },
-        envelope: { attack: 0.005, decay: 1.0, sustain: 0.1, release: 1.0 },
+        envelope: { attack: 0.002, decay: 1.5, sustain: 0.05, release: 1.2 },
       })
-      synth.volume.value = -8
+      synth.volume.value = baseVolume
       return synth
     }
     case 'guitar': {
-      // Clean guitar
+      // Plucky guitar - different from piano with shorter decay, slight attack
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.002, decay: 0.5, sustain: 0.1, release: 0.8 },
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.008, decay: 0.4, sustain: 0.15, release: 0.6 },
       })
-      synth.volume.value = -8
+      synth.volume.value = baseVolume
       return synth
     }
     case 'strings': {
-      // Softer strings
+      // Soft strings with slow attack
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
         oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.3, decay: 0.3, sustain: 0.7, release: 1.5 },
+        envelope: { attack: 0.4, decay: 0.3, sustain: 0.6, release: 1.2 },
       })
-      synth.volume.value = -10
+      synth.volume.value = baseVolume - 2 // Slightly lower due to sustained nature
       return synth
     }
     case 'brass': {
-      // Clean brass
+      // Punchy brass
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.05, decay: 0.2, sustain: 0.6, release: 0.3 },
+        envelope: { attack: 0.06, decay: 0.2, sustain: 0.5, release: 0.25 },
       })
-      synth.volume.value = -8
+      synth.volume.value = baseVolume - 2 // Slightly lower due to harsh overtones
       return synth
     }
     case 'organ': {
-      // Clean organ
+      // Sustained organ
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.2 },
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0.85, release: 0.15 },
       })
-      synth.volume.value = -8
+      synth.volume.value = baseVolume
       return synth
     }
     case 'voice': {
-      // Clean vocal sound
+      // Soft vocal/choir
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.1, decay: 0.2, sustain: 0.7, release: 0.4 },
+        envelope: { attack: 0.15, decay: 0.2, sustain: 0.6, release: 0.4 },
       })
-      synth.volume.value = -6
+      synth.volume.value = baseVolume
       return synth
     }
     case 'synth':
     default: {
-      // Clean synth
+      // Classic synth
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.5 },
+        oscillator: { type: 'square' },
+        envelope: { attack: 0.02, decay: 0.2, sustain: 0.4, release: 0.4 },
       })
-      synth.volume.value = -8
+      synth.volume.value = baseVolume - 2 // Slightly lower due to harsh square wave
       return synth
     }
   }

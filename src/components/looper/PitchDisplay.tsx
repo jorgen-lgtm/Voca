@@ -5,8 +5,10 @@ import type { PitchDetectionResult } from '@/types/audio'
 
 interface PitchDisplayProps {
   pitch: PitchDetectionResult | null
+  audioLevel?: number
   isRecording: boolean
   isDrumMode?: boolean
+  isVoiceMode?: boolean
   lastDrumType?: 'kick' | 'snare' | 'hihat' | null
 }
 
@@ -16,8 +18,65 @@ const DRUM_INFO = {
   hihat: { emoji: '🔔', name: 'HI-HAT', color: 'from-cyan-500 to-blue-500', hint: 'Säg "TSS"' },
 }
 
-export function PitchDisplay({ pitch, isRecording, isDrumMode, lastDrumType }: PitchDisplayProps) {
+export function PitchDisplay({ pitch, audioLevel = 0, isRecording, isDrumMode, isVoiceMode, lastDrumType }: PitchDisplayProps) {
   if (!isRecording) return null
+
+  // Voice/Speech mode UI
+  if (isVoiceMode) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="absolute top-20 left-0 right-0 flex justify-center"
+      >
+        <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-gray-800/80 backdrop-blur-sm border border-cyan-500/30">
+          <div className="flex items-center gap-2 text-cyan-400">
+            <span className="text-2xl">🗣️</span>
+            <span className="font-medium">Tal-läge</span>
+          </div>
+          
+          {/* Audio level visualization */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-end gap-0.5 h-10">
+              {[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((threshold, i) => (
+                <motion.div
+                  key={i}
+                  className={`w-2 rounded-sm ${
+                    audioLevel >= threshold 
+                      ? 'bg-cyan-400' 
+                      : 'bg-gray-600'
+                  }`}
+                  style={{ height: `${(i + 1) * 4}px` }}
+                  animate={{ 
+                    opacity: audioLevel >= threshold ? 1 : 0.3,
+                  }}
+                  transition={{ duration: 0.05 }}
+                />
+              ))}
+            </div>
+            
+            {pitch?.noteName ? (
+              <motion.span
+                key={pitch.noteName}
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                className="text-3xl font-bold text-cyan-300 ml-3"
+              >
+                {pitch.noteName}
+              </motion.span>
+            ) : (
+              <span className="text-gray-400 ml-3">...</span>
+            )}
+          </div>
+          
+          <div className="text-xs text-gray-400 text-center max-w-xs">
+            Prata eller läs högt - melodin i ditt tal blir musik!
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
 
   if (isDrumMode) {
     return (
@@ -113,18 +172,37 @@ export function PitchDisplay({ pitch, isRecording, isDrumMode, lastDrumType }: P
               key="listening"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-gray-400"
+              className="flex flex-col items-center gap-2"
             >
-              <motion.div
-                className="flex gap-1"
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              >
-                <span className="w-1.5 h-4 bg-purple-500 rounded-full" />
-                <span className="w-1.5 h-6 bg-pink-500 rounded-full" />
-                <span className="w-1.5 h-3 bg-purple-500 rounded-full" />
-              </motion.div>
-              <span className="text-sm">Sing or hum...</span>
+              <div className="flex items-center gap-3">
+                {/* Audio level meter */}
+                <div className="flex items-end gap-0.5 h-8">
+                  {[0.2, 0.4, 0.6, 0.8, 1.0].map((threshold, i) => (
+                    <motion.div
+                      key={i}
+                      className={`w-1.5 rounded-full ${
+                        audioLevel >= threshold 
+                          ? i < 2 ? 'bg-green-500' : i < 4 ? 'bg-yellow-500' : 'bg-red-500'
+                          : 'bg-gray-600'
+                      }`}
+                      style={{ height: `${(i + 1) * 6}px` }}
+                      animate={{ 
+                        opacity: audioLevel >= threshold ? 1 : 0.3,
+                        scaleY: audioLevel >= threshold ? [1, 1.1, 1] : 1
+                      }}
+                      transition={{ duration: 0.1 }}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-gray-400">
+                  {audioLevel > 0.1 ? 'Lyssnar...' : 'Nynna eller sjung'}
+                </span>
+              </div>
+              {audioLevel < 0.05 && (
+                <span className="text-xs text-amber-400">
+                  🎤 Inget ljud - kontrollera mikrofonen
+                </span>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

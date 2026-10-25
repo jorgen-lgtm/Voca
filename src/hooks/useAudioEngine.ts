@@ -118,6 +118,16 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
       synth.volume.value = -4
       return synth
     }
+    case 'voice': {
+      // Voice/choir sound for speech-to-melody
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.set({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.05, decay: 0.1, sustain: 0.8, release: 0.3 },
+      })
+      synth.volume.value = -2
+      return synth
+    }
     case 'synth':
     default: {
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
@@ -151,6 +161,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   })
 
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
+  const [audioLevel, setAudioLevel] = useState<number>(0)
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
@@ -181,48 +192,74 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const initializeAudio = useCallback(async () => {
     if (isInitializedRef.current) {
+      // Even if initialized, ensure contexts are running (mobile can suspend them)
+      try {
+        if (Tone.getContext().state !== 'running') {
+          await Tone.getContext().resume()
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'running') {
+          await audioContextRef.current.resume()
+        }
+      } catch (e) {
+        console.warn('Failed to resume contexts:', e)
+      }
       return true
     }
 
     try {
       console.log('Starting audio initialization...')
       
-      // Start Tone.js - critical for mobile
-      await Tone.start()
-      console.log('Tone.js started, context state:', Tone.getContext().state)
-      
-      // Ensure context is running
-      if (Tone.getContext().state !== 'running') {
-        await Tone.getContext().resume()
-        console.log('Context resumed, state:', Tone.getContext().state)
-      }
-
-      // Check for microphone support
+      // Check for microphone support first
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia not supported')
         alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Safari.')
         return false
       }
 
-      // Get microphone access
+      // Create audio context FIRST (needed for iOS)
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      audioContextRef.current = new AudioContextClass({ sampleRate: 44100 })
+      console.log('AudioContext created, state:', audioContextRef.current.state)
+      
+      // Resume immediately (iOS requires this in user gesture)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume()
+        console.log('AudioContext resumed, state:', audioContextRef.current.state)
+      }
+
+      // Start Tone.js
+      await Tone.start()
+      console.log('Tone.js started, context state:', Tone.getContext().state)
+      
+      // Ensure Tone context is running
+      if (Tone.getContext().state !== 'running') {
+        await Tone.getContext().resume()
+        console.log('Tone context resumed, state:', Tone.getContext().state)
+      }
+
+      // Get microphone access with iOS-friendly constraints
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
-          noiseSuppression: true,
+          noiseSuppression: false,  // Disable - can interfere with pitch detection
           autoGainControl: true,
+          sampleRate: { ideal: 44100 },
         },
       })
-      console.log('Got media stream')
+      console.log('Got media stream with tracks:', stream.getAudioTracks().length)
       mediaStreamRef.current = stream
-
-      // Create audio context for pitch detection
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      audioContextRef.current = new AudioContextClass()
       
-      if (audioContextRef.current.state === 'suspended') {
+      // Verify the stream is active
+      const audioTrack = stream.getAudioTracks()[0]
+      if (audioTrack) {
+        console.log('Audio track settings:', audioTrack.getSettings())
+      }
+      
+      // Double-check context is still running after getUserMedia
+      if (audioContextRef.current.state !== 'running') {
         await audioContextRef.current.resume()
       }
-      console.log('AudioContext state:', audioContextRef.current.state)
+      console.log('AudioContext state after getUserMedia:', audioContextRef.current.state)
       
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
@@ -231,12 +268,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       analyserRef.current.smoothingTimeConstant = 0.1
       source.connect(analyserRef.current)
       
-      // Initialize pitch detector
+      // Initialize pitch detector with settings optimized for humming
       const sampleRate = audioContextRef.current.sampleRate
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
-        threshold: 0.2,
-        probabilityThreshold: 0.1 
+        threshold: 0.1,        // Lower = more sensitive to pitch
+        probabilityThreshold: 0.05  // Lower = accept less certain pitches
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
@@ -256,7 +293,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       console.log('Drum kit created')
 
       // Create all instruments immediately (synths are fast to create)
-      const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ']
+      const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
       allInstruments.forEach(type => {
         const synth = createInstrumentSynth(type, masterVolumeRef.current!)
         instrumentsRef.current.set(type, synth)
@@ -303,7 +340,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.005
+    // Update audio level for visual feedback (0-1 scale, amplified for visibility)
+    const level = Math.min(rms * 50, 1)
+    setAudioLevel(level)
+
+    // Voice mode is more sensitive to capture speech
+    const isVoiceMode = currentInstrument === 'voice'
+    const minVolume = isVoiceMode ? 0.0005 : 0.001
+    
     if (rms < minVolume) {
       lastDetectedPitchRef.current = null
       pitchStabilityCountRef.current = 0
@@ -313,19 +357,40 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const frequency = pitchDetectorRef.current(buffer)
 
-    if (frequency && frequency > 65 && frequency < 1000) {
+    // Speech frequency range is typically 85-300Hz for males, 165-255Hz for females
+    // But can go higher with intonation. Use wider range for speech mode.
+    const minFreq = isVoiceMode ? 60 : 50
+    const maxFreq = isVoiceMode ? 600 : 800
+    
+    if (frequency && frequency > minFreq && frequency < maxFreq) {
       const midiNote = frequencyToMidi(frequency)
       
-      if (lastDetectedPitchRef.current === midiNote) {
-        pitchStabilityCountRef.current++
-      } else {
+      // Voice mode: capture every pitch change immediately for speech prosody
+      // Other modes: allow some tolerance for stability
+      if (isVoiceMode) {
+        // In voice mode, always accept the pitch (speech changes rapidly)
         pitchStabilityCountRef.current = 1
+        lastDetectedPitchRef.current = midiNote
+      } else {
+        const pitchTolerance = 2 // semitones
+        const lastPitch = lastDetectedPitchRef.current
+        const isStable = lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance
+        
+        if (isStable || lastDetectedPitchRef.current === midiNote) {
+          pitchStabilityCountRef.current++
+        } else {
+          pitchStabilityCountRef.current = 1
+        }
+        
         lastDetectedPitchRef.current = midiNote
       }
 
-      if (pitchStabilityCountRef.current >= 2) {
+      // Voice mode needs no stability wait - capture immediately
+      const stabilityRequired = isVoiceMode ? 1 : 1
+      
+      if (pitchStabilityCountRef.current >= stabilityRequired) {
         const noteName = midiToNoteName(midiNote)
-        const clarity = Math.min(rms * 15, 1)
+        const clarity = Math.min(rms * 30, 1)
 
         const result: PitchDetectionResult = {
           frequency,
@@ -339,7 +404,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       } else {
         setCurrentPitch({
           frequency,
-          clarity: Math.min(rms * 15, 1),
+          clarity: Math.min(rms * 30, 1),
           midiNote: null,
           noteName: null,
         })
@@ -351,7 +416,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     pitchStabilityCountRef.current = 0
     setCurrentPitch(null)
     return null
-  }, [])
+  }, [currentInstrument])
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)
@@ -685,7 +750,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const cycleInstrument = useCallback((direction: 'next' | 'prev') => {
-    const instruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ']
+    const instruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
     const currentIndex = instruments.indexOf(currentInstrument)
     let newIndex: number
 
@@ -808,6 +873,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   return {
     state,
     currentPitch,
+    audioLevel,
     lastDrumType,
     loops,
     currentInstrument,

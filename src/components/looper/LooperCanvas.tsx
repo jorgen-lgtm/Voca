@@ -32,6 +32,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
   const {
     state,
     currentPitch,
+    audioLevel,
     lastDrumType,
     loops,
     currentInstrument,
@@ -138,8 +139,10 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       {/* Pitch Display */}
       <PitchDisplay 
         pitch={currentPitch} 
+        audioLevel={audioLevel}
         isRecording={state.isRecording} 
         isDrumMode={currentInstrument === 'drums'}
+        isVoiceMode={currentInstrument === 'voice'}
         lastDrumType={lastDrumType}
       />
 

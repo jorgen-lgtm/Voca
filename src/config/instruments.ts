@@ -94,6 +94,16 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     octaveRange: [2, 7],
     description: 'Kyrkoorgel',
   },
+  {
+    type: 'voice',
+    name: 'Röst/Tal',
+    icon: '🗣️',
+    color: '#06b6d4',
+    soundfont: 'voice_oohs',
+    category: 'keys',
+    octaveRange: [2, 6],
+    description: 'Fångar melodin i ditt tal',
+  },
 ]
 
 export const INSTRUMENT_MAP = new Map<InstrumentType, InstrumentConfig>(

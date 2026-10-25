@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 interface RecordButtonProps {
@@ -17,11 +18,18 @@ export function RecordButton({
   onRelease,
   onInitialize,
 }: RecordButtonProps) {
+  const [isInitializing, setIsInitializing] = useState(false)
+
   const handleInteraction = async () => {
     if (!isInitialized) {
-      const success = await onInitialize()
-      if (success) {
-        onPress()
+      setIsInitializing(true)
+      try {
+        const success = await onInitialize()
+        if (success) {
+          onPress()
+        }
+      } finally {
+        setIsInitializing(false)
       }
       return
     }
@@ -54,11 +62,14 @@ export function RecordButton({
 
       <motion.button
         onClick={handleInteraction}
+        disabled={isInitializing}
         className={`relative w-28 h-28 rounded-full flex items-center justify-center ${
-          isRecording
-            ? 'bg-gradient-to-br from-red-500 to-red-700'
-            : 'bg-gradient-to-br from-purple-500 to-purple-700'
-        } shadow-2xl`}
+          isInitializing
+            ? 'bg-gradient-to-br from-yellow-500 to-orange-600'
+            : isRecording
+              ? 'bg-gradient-to-br from-red-500 to-red-700'
+              : 'bg-gradient-to-br from-purple-500 to-purple-700'
+        } shadow-2xl disabled:opacity-80`}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         animate={{

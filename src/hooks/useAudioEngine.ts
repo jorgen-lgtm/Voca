@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
-import PitchFinder from 'pitchfinder'
+import * as tf from '@tensorflow/tfjs'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 
@@ -92,7 +92,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
-  const pitchDetectorRef = useRef<ReturnType<typeof PitchFinder.Macleod> | null>(null)
+  const aiReadyRef = useRef<boolean>(false)
   const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth>>(new Map())
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
@@ -104,8 +104,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const initializeAudio = useCallback(async () => {
     try {
-      await Tone.start()
-      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('getUserMedia not supported')
+        alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Firefox.')
+        return false
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -115,6 +119,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       })
       mediaStreamRef.current = stream
 
+      await Tone.start()
       audioContextRef.current = new AudioContext()
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
@@ -136,10 +141,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       highPassFilterRef.current.connect(lowPassFilterRef.current)
       lowPassFilterRef.current.connect(analyserRef.current)
 
-      pitchDetectorRef.current = PitchFinder.Macleod({
-        sampleRate: audioContextRef.current.sampleRate,
-        cutoff: 0.9,
-      })
+      await tf.ready()
+      console.log('TensorFlow.js ready:', tf.getBackend())
+      aiReadyRef.current = true
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
       instruments.forEach((type) => {
@@ -152,12 +156,23 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return true
     } catch (error) {
       console.error('Failed to initialize audio:', error)
+      
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          alert('Mikrofon-åtkomst nekad. Tillåt mikrofon i webbläsarens inställningar och ladda om sidan.')
+        } else if (error.name === 'NotFoundError') {
+          alert('Ingen mikrofon hittades. Anslut en mikrofon och ladda om sidan.')
+        } else {
+          alert(`Kunde inte starta ljud: ${error.message}`)
+        }
+      }
+      
       return false
     }
   }, [tempo])
 
   const detectPitch = useCallback(() => {
-    if (!analyserRef.current || !pitchDetectorRef.current || !audioContextRef.current) {
+    if (!analyserRef.current || !audioContextRef.current) {
       return null
     }
 
@@ -166,27 +181,23 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     analyserRef.current.getFloatTimeDomainData(buffer)
 
     let rms = 0
-    let maxAmplitude = 0
     for (let i = 0; i < buffer.length; i++) {
-      const abs = Math.abs(buffer[i])
       rms += buffer[i] * buffer[i]
-      if (abs > maxAmplitude) maxAmplitude = abs
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.002
+    const minVolume = 0.003
     if (rms < minVolume) {
       setCurrentPitch(null)
       return null
     }
 
-    const pitchResult = pitchDetectorRef.current(buffer)
+    const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate)
 
-    if (pitchResult && pitchResult.freq > 60 && pitchResult.freq < 1500 && pitchResult.probability > 0.5) {
-      const frequency = pitchResult.freq
+    if (frequency > 0 && frequency > 60 && frequency < 1000) {
       const midiNote = frequencyToMidi(frequency)
       const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 12, 1)
+      const clarity = Math.min(rms * 15, 1)
 
       const result: PitchDetectionResult = {
         frequency,
@@ -458,4 +469,50 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     setCurrentInstrument,
     triggerNote,
   }
+}
+
+function autoCorrelate(buffer: Float32Array, sampleRate: number): number {
+  const SIZE = buffer.length
+  const MAX_SAMPLES = Math.floor(SIZE / 2)
+  let bestOffset = -1
+  let bestCorrelation = 0
+  let foundGoodCorrelation = false
+  const correlations = new Float32Array(MAX_SAMPLES)
+
+  let rms = 0
+  for (let i = 0; i < SIZE; i++) {
+    rms += buffer[i] * buffer[i]
+  }
+  rms = Math.sqrt(rms / SIZE)
+
+  if (rms < 0.01) return -1
+
+  let lastCorrelation = 1
+  for (let offset = 0; offset < MAX_SAMPLES; offset++) {
+    let correlation = 0
+
+    for (let i = 0; i < MAX_SAMPLES; i++) {
+      correlation += Math.abs(buffer[i] - buffer[i + offset])
+    }
+    correlation = 1 - correlation / MAX_SAMPLES
+    correlations[offset] = correlation
+
+    if (correlation > 0.9 && correlation > lastCorrelation) {
+      foundGoodCorrelation = true
+      if (correlation > bestCorrelation) {
+        bestCorrelation = correlation
+        bestOffset = offset
+      }
+    } else if (foundGoodCorrelation) {
+      const shift = (correlations[bestOffset + 1] - correlations[bestOffset - 1]) / correlations[bestOffset]
+      return sampleRate / (bestOffset + 8 * shift)
+    }
+    lastCorrelation = correlation
+  }
+
+  if (bestCorrelation > 0.01) {
+    return sampleRate / bestOffset
+  }
+
+  return -1
 }

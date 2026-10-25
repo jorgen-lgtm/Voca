@@ -71,7 +71,9 @@ export function PitchDisplay({ pitch, audioLevel = 0, isRecording, isDrumMode, i
           </div>
           
           <div className="text-xs text-gray-400 text-center max-w-xs">
-            Prata eller läs högt - melodin i ditt tal blir musik!
+            Prata tydligt eller läs högt - ditt tal blir musik!
+            <br />
+            <span className="text-cyan-400/70">Tips: Variera tonhöjden i rösten</span>
           </div>
         </div>
       </motion.div>

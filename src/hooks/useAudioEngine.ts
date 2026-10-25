@@ -325,6 +325,27 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [tempo])
 
+  // Snap MIDI note to C major scale (can be expanded to other scales)
+  const snapToScale = useCallback((midiNote: number): number => {
+    const scaleNotes = [0, 2, 4, 5, 7, 9, 11] // C major scale intervals
+    const noteInOctave = midiNote % 12
+    const octave = Math.floor(midiNote / 12)
+    
+    // Find closest scale note
+    let closest = scaleNotes[0]
+    let minDist = Math.abs(noteInOctave - scaleNotes[0])
+    
+    for (const scaleNote of scaleNotes) {
+      const dist = Math.abs(noteInOctave - scaleNote)
+      if (dist < minDist) {
+        minDist = dist
+        closest = scaleNote
+      }
+    }
+    
+    return octave * 12 + closest
+  }, [])
+
   const detectPitch = useCallback(() => {
     if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
       return null
@@ -344,9 +365,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const level = Math.min(rms * 50, 1)
     setAudioLevel(level)
 
-    // Voice mode is more sensitive to capture speech
     const isVoiceMode = currentInstrument === 'voice'
-    const minVolume = isVoiceMode ? 0.0005 : 0.001
+    const minVolume = isVoiceMode ? 0.002 : 0.001
     
     if (rms < minVolume) {
       lastDetectedPitchRef.current = null
@@ -357,38 +377,56 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const frequency = pitchDetectorRef.current(buffer)
 
-    // Speech frequency range is typically 85-300Hz for males, 165-255Hz for females
-    // But can go higher with intonation. Use wider range for speech mode.
-    const minFreq = isVoiceMode ? 60 : 50
-    const maxFreq = isVoiceMode ? 600 : 800
+    // For voice mode, we also try to detect based on volume/energy
+    // to create rhythm even when pitch isn't clear
+    if (isVoiceMode && !frequency && rms > 0.01) {
+      // Use volume to trigger notes when pitch isn't detected
+      // Map volume to a pitch range (louder = higher)
+      const volumeBasedPitch = Math.floor(48 + (rms * 200)) // C3 to ~C5
+      const snappedPitch = snapToScale(Math.min(72, volumeBasedPitch))
+      
+      if (lastDetectedPitchRef.current !== snappedPitch) {
+        lastDetectedPitchRef.current = snappedPitch
+        pitchStabilityCountRef.current = 1
+        
+        const noteName = midiToNoteName(snappedPitch)
+        const result: PitchDetectionResult = {
+          frequency: null,
+          clarity: Math.min(rms * 20, 1),
+          midiNote: snappedPitch,
+          noteName,
+        }
+        setCurrentPitch(result)
+        return result
+      }
+      return null
+    }
+
+    const minFreq = isVoiceMode ? 80 : 50
+    const maxFreq = isVoiceMode ? 500 : 800
     
     if (frequency && frequency > minFreq && frequency < maxFreq) {
-      const midiNote = frequencyToMidi(frequency)
+      let midiNote = frequencyToMidi(frequency)
       
-      // Voice mode: capture every pitch change immediately for speech prosody
-      // Other modes: allow some tolerance for stability
+      // In voice mode, snap to musical scale for more pleasing results
       if (isVoiceMode) {
-        // In voice mode, always accept the pitch (speech changes rapidly)
-        pitchStabilityCountRef.current = 1
-        lastDetectedPitchRef.current = midiNote
-      } else {
-        const pitchTolerance = 2 // semitones
-        const lastPitch = lastDetectedPitchRef.current
-        const isStable = lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance
-        
-        if (isStable || lastDetectedPitchRef.current === midiNote) {
-          pitchStabilityCountRef.current++
-        } else {
-          pitchStabilityCountRef.current = 1
-        }
-        
-        lastDetectedPitchRef.current = midiNote
+        midiNote = snapToScale(midiNote)
       }
-
-      // Voice mode needs no stability wait - capture immediately
-      const stabilityRequired = isVoiceMode ? 1 : 1
       
-      if (pitchStabilityCountRef.current >= stabilityRequired) {
+      // Voice mode: more tolerance for pitch changes
+      const pitchTolerance = isVoiceMode ? 3 : 2
+      const lastPitch = lastDetectedPitchRef.current
+      const isStable = lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance
+      
+      if (isStable || lastDetectedPitchRef.current === midiNote) {
+        pitchStabilityCountRef.current++
+      } else {
+        pitchStabilityCountRef.current = 1
+      }
+      
+      lastDetectedPitchRef.current = midiNote
+
+      if (pitchStabilityCountRef.current >= 1) {
         const noteName = midiToNoteName(midiNote)
         const clarity = Math.min(rms * 30, 1)
 
@@ -416,7 +454,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     pitchStabilityCountRef.current = 0
     setCurrentPitch(null)
     return null
-  }, [currentInstrument])
+  }, [currentInstrument, snapToScale])
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)

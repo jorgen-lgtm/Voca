@@ -15,6 +15,7 @@ import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
 import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
+import { PRODUCER_PERSONA, getProducerTip, suggestNextInstrument, assessQuality } from '@/config/producer'
 import type { RecordedLoop } from '@/types/audio'
 
 interface LooperCanvasProps {
@@ -90,8 +91,13 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       scale: 'major',
     })
     updateLoops(enhanced)
-    setAiMessage('✨ All tracks enhanced!')
-    setTimeout(() => setAiMessage(null), 3000)
+    // Check if any loops were drums for specific feedback
+    const hasDrums = loops.some(l => l.instrumentType === 'drums')
+    const tip = hasDrums && loops.length === 1 
+      ? getProducerTip('drums') 
+      : getProducerTip('enhance')
+    setAiMessage(tip)
+    setTimeout(() => setAiMessage(null), 4000)
   }
 
   const handleQuantize = () => {
@@ -101,8 +107,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       notes: quantizeNotes(loop.notes, state.tempo, 0.25)
     }))
     updateLoops(quantized)
-    setAiMessage('🎵 Notes quantized to the beat!')
-    setTimeout(() => setAiMessage(null), 3000)
+    setAiMessage(getProducerTip('quantize'))
+    setTimeout(() => setAiMessage(null), 4000)
   }
 
   return (
@@ -196,9 +202,9 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         />
       )}
 
-      {/* AI Panel */}
+      {/* AI Producer Panel */}
       <AnimatePresence>
-        {showAIPanel && loops.length > 0 && (
+        {showAIPanel && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -206,41 +212,75 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             className="absolute top-24 left-4 right-4 z-20 flex justify-center"
           >
             <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full">
+              {/* Producer Header */}
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="font-medium text-white">AI Assistent</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg">
+                    🎧
+                  </div>
+                  <div>
+                    <div className="font-medium text-white text-sm">{PRODUCER_PERSONA.name}</div>
+                    <div className="text-xs text-purple-400">{PRODUCER_PERSONA.title}</div>
+                  </div>
                 </div>
-                <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white">✕</button>
+                <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white p-1">✕</button>
               </div>
+
+              {/* Producer Suggestion */}
+              <div className="mb-3 p-3 rounded-xl bg-gray-900/50 border border-gray-700/50">
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {loops.length === 0 
+                    ? getProducerTip('empty')
+                    : suggestNextInstrument(loops.map(l => l.instrumentType))
+                  }
+                </p>
+              </div>
+
+              {/* Quality Assessment */}
+              {loops.length > 0 && (
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${assessQuality(loops).score}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-400 w-12 text-right">
+                    {assessQuality(loops).score}%
+                  </span>
+                </div>
+              )}
               
-              <div className="space-y-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  disabled={aiLoading || state.isPlaying}
-                  onClick={handleEnhanceAll}
-                  className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 text-left hover:border-purple-400/50 transition-colors disabled:opacity-50"
-                >
-                  <div className="font-medium text-white text-sm">✨ Enhance all tracks</div>
-                  <div className="text-xs text-gray-400">Quantize, smooth & snap to scale</div>
-                </motion.button>
+              {/* Action Buttons */}
+              {loops.length > 0 && (
+                <div className="space-y-2">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={aiLoading || state.isPlaying}
+                    onClick={handleEnhanceAll}
+                    className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/30 to-pink-600/30 border border-purple-500/40 text-left hover:border-purple-400/60 transition-colors disabled:opacity-50"
+                  >
+                    <div className="font-medium text-white text-sm">🎚️ Polera alla spår</div>
+                    <div className="text-xs text-gray-400">Fixa timing, rensa brus, sätt i skala</div>
+                  </motion.button>
 
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  disabled={aiLoading || state.isPlaying}
-                  onClick={handleQuantize}
-                  className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
-                >
-                  <div className="font-medium text-white text-sm">🎵 Quantize</div>
-                  <div className="text-xs text-gray-400">Snap notes to the beat</div>
-                </motion.button>
-              </div>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    disabled={aiLoading || state.isPlaying}
+                    onClick={handleQuantize}
+                    className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
+                  >
+                    <div className="font-medium text-white text-sm">⏱️ Fixa timing</div>
+                    <div className="text-xs text-gray-400">Lägg noter på rätt beat</div>
+                  </motion.button>
+                </div>
+              )}
 
-              {state.isPlaying && (
+              {state.isPlaying && loops.length > 0 && (
                 <div className="mt-3 text-amber-400 text-xs text-center">
                   ⏸️ Stoppa uppspelningen först
                 </div>
@@ -248,11 +288,23 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
               {aiMessage && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-3 p-2 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300 text-center"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-3 p-3 rounded-xl bg-green-500/20 border border-green-500/30 text-sm text-green-300"
                 >
                   {aiMessage}
+                </motion.div>
+              )}
+
+              {/* Producer tip */}
+              {!aiMessage && loops.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="mt-3 text-xs text-gray-500 text-center"
+                >
+                  {getProducerTip('suggestion')}
                 </motion.div>
               )}
             </div>

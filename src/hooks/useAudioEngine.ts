@@ -62,41 +62,91 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
   return { kick, snare, hihat }
 }
 
-function createInstrument(type: InstrumentType, masterVolume: Tone.Volume): Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth | null {
+const SOUNDFONT_URL = 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite'
+
+const INSTRUMENT_SOUNDFONTS: Record<InstrumentType, string> = {
+  drums: 'synth_drum',
+  bass: 'acoustic_bass',
+  synth: 'synth_brass_1',
+  piano: 'acoustic_grand_piano',
+  pad: 'pad_2_warm',
+  lead: 'lead_1_square',
+}
+
+async function createSampledInstrument(
+  type: InstrumentType, 
+  masterVolume: Tone.Volume
+): Promise<Tone.Sampler | null> {
+  if (type === 'drums') {
+    return null
+  }
+
+  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
+  const soundfontName = INSTRUMENT_SOUNDFONTS[type]
+  
+  const notes = ['C2', 'C3', 'C4', 'C5', 'C6']
+  const urls: Record<string, string> = {}
+  
+  notes.forEach(note => {
+    const noteForUrl = note.replace('#', 's')
+    urls[note] = `${SOUNDFONT_URL}/${soundfontName}-mp3/${noteForUrl}.mp3`
+  })
+
+  return new Promise((resolve) => {
+    const sampler = new Tone.Sampler({
+      urls,
+      baseUrl: '',
+      onload: () => {
+        console.log(`Loaded samples for ${type}`)
+        resolve(sampler)
+      },
+      onerror: (err) => {
+        console.warn(`Failed to load samples for ${type}, using fallback:`, err)
+        resolve(createFallbackSynth(type, masterVolume))
+      }
+    }).connect(reverb)
+  })
+}
+
+function createFallbackSynth(type: InstrumentType, masterVolume: Tone.Volume): Tone.Sampler {
   const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
   
+  const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+  
   switch (type) {
-    case 'drums':
-      return null
     case 'bass':
-      return new Tone.PolySynth(Tone.MonoSynth, {
+      synth.set({
         oscillator: { type: 'sawtooth' },
         envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 0.8 },
-        filterEnvelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.8, baseFrequency: 200, octaves: 2 },
-      }).connect(reverb)
-    case 'synth':
-      return new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'fatsawtooth', spread: 20, count: 3 },
-        envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.5 },
-      }).connect(reverb)
+      })
+      break
     case 'piano':
-      return new Tone.PolySynth(Tone.Synth, {
+      synth.set({
         oscillator: { type: 'triangle' },
-        envelope: { attack: 0.01, decay: 0.5, sustain: 0.2, release: 1.5 },
-      }).connect(reverb)
+        envelope: { attack: 0.01, decay: 0.8, sustain: 0.1, release: 1.5 },
+      })
+      break
     case 'pad':
-      return new Tone.PolySynth(Tone.Synth, {
+      synth.set({
         oscillator: { type: 'sine' },
         envelope: { attack: 0.8, decay: 0.5, sustain: 0.9, release: 3 },
-      }).connect(reverb)
+      })
+      break
     case 'lead':
-      return new Tone.PolySynth(Tone.Synth, {
+      synth.set({
         oscillator: { type: 'square' },
         envelope: { attack: 0.02, decay: 0.1, sustain: 0.6, release: 0.4 },
-      }).connect(reverb)
+      })
+      break
+    case 'synth':
     default:
-      return new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.set({
+        oscillator: { type: 'fatsawtooth' },
+        envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.5 },
+      })
   }
+  
+  return synth as unknown as Tone.Sampler
 }
 
 interface UseAudioEngineProps {
@@ -128,7 +178,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const aiReadyRef = useRef<boolean>(false)
-  const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth | null>>(new Map())
+  const instrumentsRef = useRef<Map<InstrumentType, Tone.Sampler | Tone.PolySynth | null>>(new Map())
   const drumKitRef = useRef<DrumKit | null>(null)
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
@@ -212,9 +262,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       drumKitRef.current = createDrumKit(masterVolumeRef.current)
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
-      instruments.forEach((type) => {
-        instrumentsRef.current.set(type, createInstrument(type, masterVolumeRef.current!))
+      
+      const loadPromises = instruments.map(async (type) => {
+        const instrument = await createSampledInstrument(type, masterVolumeRef.current!)
+        instrumentsRef.current.set(type, instrument)
       })
+      
+      await Promise.all(loadPromises)
+      console.log('All instruments loaded')
 
       Tone.getTransport().bpm.value = tempo
 
@@ -304,13 +359,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)
-    if (instrument) {
-      if (currentInstrument === 'drums' && instrument instanceof Tone.NoiseSynth) {
-        instrument.triggerAttackRelease('8n')
-      } else if ('triggerAttackRelease' in instrument) {
-        const noteName = midiToNoteName(midiNote)
-        ;(instrument as Tone.PolySynth).triggerAttackRelease(noteName, duration)
-      }
+    if (instrument && 'triggerAttackRelease' in instrument) {
+      const noteName = midiToNoteName(midiNote)
+      instrument.triggerAttackRelease(noteName, duration)
     }
   }, [currentInstrument])
 
@@ -587,7 +638,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       } else {
         const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
         if (instrument && 'triggerAttackRelease' in instrument) {
-          ;(instrument as Tone.PolySynth).triggerAttackRelease(event.note, event.duration, time)
+          instrument.triggerAttackRelease(event.note, event.duration, time)
         }
       }
     }, partEvents.map((e) => [e.time, e]))

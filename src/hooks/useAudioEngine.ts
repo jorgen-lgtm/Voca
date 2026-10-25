@@ -26,15 +26,48 @@ function midiToNoteName(midi: number): string {
   return `${note}${octave}`
 }
 
-function createInstrument(type: InstrumentType, masterVolume: Tone.Volume): Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth {
+type DrumKit = {
+  kick: Tone.MembraneSynth
+  snare: Tone.NoiseSynth
+  hihat: Tone.MetalSynth
+}
+
+function createDrumKit(masterVolume: Tone.Volume): DrumKit {
+  const kickReverb = new Tone.Reverb({ decay: 0.5, wet: 0.2 }).connect(masterVolume)
+  const snareReverb = new Tone.Reverb({ decay: 0.3, wet: 0.15 }).connect(masterVolume)
+  const hihatReverb = new Tone.Reverb({ decay: 0.1, wet: 0.1 }).connect(masterVolume)
+
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 6,
+    envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.5 },
+  }).connect(kickReverb)
+  kick.volume.value = -6
+
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
+  }).connect(snareReverb)
+  snare.volume.value = -10
+
+  const hihat = new Tone.MetalSynth({
+    envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 },
+    harmonicity: 5.1,
+    modulationIndex: 32,
+    resonance: 4000,
+    octaves: 1.5,
+  }).connect(hihatReverb)
+  hihat.volume.value = -15
+
+  return { kick, snare, hihat }
+}
+
+function createInstrument(type: InstrumentType, masterVolume: Tone.Volume): Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth | null {
   const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
   
   switch (type) {
     case 'drums':
-      return new Tone.NoiseSynth({
-        noise: { type: 'white' },
-        envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
-      }).connect(reverb)
+      return null
     case 'bass':
       return new Tone.PolySynth(Tone.MonoSynth, {
         oscillator: { type: 'sawtooth' },
@@ -95,7 +128,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const aiReadyRef = useRef<boolean>(false)
-  const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth>>(new Map())
+  const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth | null>>(new Map())
+  const drumKitRef = useRef<DrumKit | null>(null)
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
@@ -174,6 +208,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
       }).toDestination()
       metronomeSynthRef.current.volume.value = -12
+
+      drumKitRef.current = createDrumKit(masterVolumeRef.current)
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
       instruments.forEach((type) => {
@@ -278,9 +314,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [currentInstrument])
 
-  const detectDrumHit = useCallback((): boolean => {
+  const detectDrumHit = useCallback((): { hit: boolean; drumType: 'kick' | 'snare' | 'hihat' | null } => {
     if (!analyserRef.current || !audioContextRef.current) {
-      return false
+      return { hit: false, drumType: null }
     }
 
     const bufferLength = analyserRef.current.fftSize
@@ -298,27 +334,77 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const currentTime = Tone.now()
     const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
-    const minTimeBetweenHits = 0.08
+    const minTimeBetweenHits = 0.06
 
     if (timeSinceLastHit < minTimeBetweenHits) {
-      return false
+      return { hit: false, drumType: null }
     }
 
-    const volumeThreshold = 0.05
-    const spikeRatio = 2.0
+    const volumeThreshold = 0.04
+    const spikeRatio = 1.8
 
     if (rms > volumeThreshold && rms > prevRms * spikeRatio) {
       lastDrumHitTimeRef.current = currentTime
-      return true
+
+      const freqData = new Uint8Array(analyserRef.current.frequencyBinCount)
+      analyserRef.current.getByteFrequencyData(freqData)
+
+      const sampleRate = audioContextRef.current.sampleRate
+      const binSize = sampleRate / analyserRef.current.fftSize
+
+      let lowEnergy = 0
+      let midEnergy = 0
+      let highEnergy = 0
+
+      for (let i = 0; i < freqData.length; i++) {
+        const freq = i * binSize
+        const energy = freqData[i]
+
+        if (freq < 300) {
+          lowEnergy += energy
+        } else if (freq < 2000) {
+          midEnergy += energy
+        } else if (freq < 8000) {
+          highEnergy += energy
+        }
+      }
+
+      const total = lowEnergy + midEnergy + highEnergy
+      if (total === 0) {
+        return { hit: true, drumType: 'snare' }
+      }
+
+      const lowRatio = lowEnergy / total
+      const highRatio = highEnergy / total
+
+      let drumType: 'kick' | 'snare' | 'hihat'
+      if (lowRatio > 0.5) {
+        drumType = 'kick'
+      } else if (highRatio > 0.35) {
+        drumType = 'hihat'
+      } else {
+        drumType = 'snare'
+      }
+
+      return { hit: true, drumType }
     }
 
-    return false
+    return { hit: false, drumType: null }
   }, [])
 
-  const triggerDrumHit = useCallback(() => {
-    const instrument = instrumentsRef.current.get('drums')
-    if (instrument && instrument instanceof Tone.NoiseSynth) {
-      instrument.triggerAttackRelease('8n')
+  const triggerDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
+    if (!drumKitRef.current) return
+
+    switch (drumType) {
+      case 'kick':
+        drumKitRef.current.kick.triggerAttackRelease('C1', '8n')
+        break
+      case 'snare':
+        drumKitRef.current.snare.triggerAttackRelease('8n')
+        break
+      case 'hihat':
+        drumKitRef.current.hihat.triggerAttackRelease('C4', '32n')
+        break
     }
   }, [])
 
@@ -344,16 +430,20 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       if (!isRecordingRef.current) return
 
       if (currentInstrument === 'drums') {
-        const isHit = detectDrumHit()
-        if (isHit) {
+        const { hit, drumType } = detectDrumHit()
+        if (hit && drumType) {
           const currentTime = Tone.now() - recordingStartTimeRef.current
+          
+          const drumMidiMap = { kick: 36, snare: 38, hihat: 42 }
+          const midiNote = drumMidiMap[drumType]
+          
           recordingNotesRef.current.push({
-            pitch: 36,
+            pitch: midiNote,
             velocity: 100,
             startTime: currentTime,
             duration: 0.1,
           })
-          triggerDrumHit()
+          triggerDrumHit(drumType)
         }
       } else {
         const pitch = detectPitch()
@@ -449,7 +539,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       loopPartRef.current.dispose()
     }
 
-    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType }> = []
+    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number }> = []
 
     loops.forEach((loop) => {
       if (loop.notes.length > 0) {
@@ -459,6 +549,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             note: midiToNoteName(note.pitch),
             duration: note.duration,
             instrument: loop.instrumentType,
+            midiNote: note.pitch,
           })
         })
       }
@@ -469,15 +560,33 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       note: e.note,
       duration: e.duration,
       instrument: e.instrument,
+      midiNote: e.midiNote,
     }))
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
-      const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
-      if (instrument) {
-        if (event.instrument === 'drums' && instrument instanceof Tone.NoiseSynth) {
-          instrument.triggerAttackRelease('8n', time)
-        } else if ('triggerAttackRelease' in instrument) {
+      if (event.instrument === 'drums' && drumKitRef.current) {
+        const midiToDrum: Record<number, 'kick' | 'snare' | 'hihat'> = {
+          36: 'kick',
+          38: 'snare',
+          42: 'hihat',
+        }
+        const drumType = midiToDrum[event.midiNote] || 'snare'
+        
+        switch (drumType) {
+          case 'kick':
+            drumKitRef.current.kick.triggerAttackRelease('C1', '8n', time)
+            break
+          case 'snare':
+            drumKitRef.current.snare.triggerAttackRelease('8n', time)
+            break
+          case 'hihat':
+            drumKitRef.current.hihat.triggerAttackRelease('C4', '32n', time)
+            break
+        }
+      } else {
+        const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
+        if (instrument && 'triggerAttackRelease' in instrument) {
           ;(instrument as Tone.PolySynth).triggerAttackRelease(event.note, event.duration, time)
         }
       }
@@ -627,7 +736,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
-      instrumentsRef.current.forEach((instrument) => instrument.dispose())
+      instrumentsRef.current.forEach((instrument) => instrument?.dispose())
+      if (drumKitRef.current) {
+        drumKitRef.current.kick.dispose()
+        drumKitRef.current.snare.dispose()
+        drumKitRef.current.hihat.dispose()
+      }
       if (loopPartRef.current) {
         loopPartRef.current.dispose()
       }

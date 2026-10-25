@@ -42,6 +42,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     cycleInstrument,
     setCurrentInstrument,
     toggleMetronome,
+    toggleMetronomeAudio,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const handleSave = () => {
@@ -266,14 +267,54 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             />
           </svg>
         </motion.button>
+        
         {state.metronomeEnabled && (
-          <motion.span
+          <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            className="text-sm text-amber-400"
+            className="flex items-center gap-3"
           >
-            {state.tempo} BPM
-          </motion.span>
+            <div className="flex gap-1">
+              {[0, 1, 2, 3].map((beat) => (
+                <motion.div
+                  key={beat}
+                  className={`w-3 h-3 rounded-full ${
+                    beat === 0 ? 'bg-amber-500' : 'bg-gray-500'
+                  }`}
+                  animate={{
+                    scale: state.metronomeBeat === beat ? 1.5 : 1,
+                    opacity: state.metronomeBeat === beat ? 1 : 0.4,
+                  }}
+                  transition={{ duration: 0.1 }}
+                />
+              ))}
+            </div>
+            
+            <span className="text-sm text-amber-400">{state.tempo} BPM</span>
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={toggleMetronomeAudio}
+              className={`p-1.5 rounded-full transition-all ${
+                state.metronomeAudible
+                  ? 'bg-amber-500/30 text-amber-400'
+                  : 'bg-gray-700/50 text-gray-500'
+              }`}
+              title={state.metronomeAudible ? 'Ljud på (använd hörlurar!)' : 'Ljud av (visuell)'}
+            >
+              {state.metronomeAudible ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+              )}
+            </motion.button>
+          </motion.div>
         )}
       </div>
 
@@ -306,13 +347,13 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           state.isRecording ? (
             <>
               <span className="text-red-500">●</span> Recording...
-              {state.metronomeEnabled && ' • 🎧 Använd hörlurar'}
+              {state.metronomeEnabled && state.metronomeAudible && ' • 🎧 Använd hörlurar!'}
             </>
           ) : (
             <>
               <span className="text-green-500">●</span> Audio ready •{' '}
               {loops.length} {loops.length === 1 ? 'loop' : 'loops'}
-              {state.metronomeEnabled && ' • 🎧 Hörlurar rekommenderas'}
+              {state.metronomeEnabled && state.metronomeAudible && ' • 🎧 Hörlurar!'}
             </>
           )
         ) : (

@@ -73,7 +73,7 @@ interface UseAudioEngineProps {
 }
 
 export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }: UseAudioEngineProps = {}) {
-  const [state, setState] = useState<AudioEngineState & { metronomeEnabled: boolean }>({
+  const [state, setState] = useState<AudioEngineState & { metronomeEnabled: boolean; metronomeAudible: boolean; metronomeBeat: number }>({
     isInitialized: false,
     isRecording: false,
     isPlaying: false,
@@ -81,6 +81,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     tempo,
     loopLength: loopBars * 4,
     metronomeEnabled: false,
+    metronomeAudible: false,
+    metronomeBeat: 0,
   })
 
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
@@ -110,8 +112,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const metronomeSynthRef = useRef<Tone.Synth | null>(null)
   const metronomeLoopRef = useRef<Tone.Loop | null>(null)
   const metronomeEnabledRef = useRef<boolean>(false)
-  const metronomeTickTimeRef = useRef<number>(0)
-  const METRONOME_DEAF_PERIOD = 0.08
+  const metronomeAudibleRef = useRef<boolean>(false)
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -195,11 +196,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return null
     }
 
-    const currentTime = Tone.now()
-    if (metronomeEnabledRef.current && currentTime - metronomeTickTimeRef.current < METRONOME_DEAF_PERIOD) {
-      return null
-    }
-
     const bufferLength = analyserRef.current.fftSize
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
@@ -277,11 +273,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return false
     }
 
-    const currentTime = Tone.now()
-    if (metronomeEnabledRef.current && currentTime - metronomeTickTimeRef.current < METRONOME_DEAF_PERIOD) {
-      return false
-    }
-
     const bufferLength = analyserRef.current.fftSize
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
@@ -295,6 +286,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const prevRms = prevRmsRef.current
     prevRmsRef.current = rms
 
+    const currentTime = Tone.now()
     const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
     const minTimeBetweenHits = 0.08
 
@@ -551,11 +543,18 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       let beatCount = 0
       metronomeLoopRef.current = new Tone.Loop((time) => {
-        if (metronomeSynthRef.current && metronomeEnabledRef.current) {
-          metronomeTickTimeRef.current = time
-          const isDownbeat = beatCount % 4 === 0
-          const note = isDownbeat ? 'C6' : 'G5'
-          metronomeSynthRef.current.triggerAttackRelease(note, '64n', time)
+        if (metronomeEnabledRef.current) {
+          const currentBeat = beatCount % 4
+          
+          Tone.getDraw().schedule(() => {
+            setState((prev) => ({ ...prev, metronomeBeat: currentBeat }))
+          }, time)
+          
+          if (metronomeAudibleRef.current && metronomeSynthRef.current) {
+            const isDownbeat = currentBeat === 0
+            const note = isDownbeat ? 'C6' : 'G5'
+            metronomeSynthRef.current.triggerAttackRelease(note, '64n', time)
+          }
         }
         beatCount++
       }, '4n')
@@ -572,11 +571,19 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         metronomeLoopRef.current = null
       }
 
+      setState((prev) => ({ ...prev, metronomeBeat: 0 }))
+
       if (!state.isPlaying && !state.isRecording) {
         Tone.getTransport().stop()
       }
     }
   }, [state.isPlaying, state.isRecording])
+
+  const toggleMetronomeAudio = useCallback(() => {
+    const newAudible = !metronomeAudibleRef.current
+    metronomeAudibleRef.current = newAudible
+    setState((prev) => ({ ...prev, metronomeAudible: newAudible }))
+  }, [])
 
   useEffect(() => {
     const transport = Tone.getTransport()
@@ -644,6 +651,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     setCurrentInstrument,
     triggerNote,
     toggleMetronome,
+    toggleMetronomeAudio,
   }
 }
 

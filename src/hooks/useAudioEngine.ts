@@ -251,7 +251,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       // Create audio context FIRST (needed for iOS)
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      audioContextRef.current = new AudioContextClass({ sampleRate: 44100 })
+      // Don't force sampleRate on mobile - let browser choose optimal rate
+      audioContextRef.current = new AudioContextClass()
       console.log('AudioContext created, state:', audioContextRef.current.state)
       
       // Resume immediately (iOS requires this in user gesture)
@@ -270,15 +271,29 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         console.log('Tone context resumed, state:', Tone.getContext().state)
       }
 
-      // Get microphone access with iOS-friendly constraints
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,  // Disable - can interfere with pitch detection
-          autoGainControl: true,
-          sampleRate: { ideal: 44100 },
-        },
-      })
+      // Check if mediaDevices is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone not supported in this browser')
+      }
+
+      // Detect mobile/iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      console.log('Device detection - iOS:', isIOS, 'Mobile:', isMobile)
+
+      // Get microphone access with mobile-friendly constraints
+      // Simpler constraints work better on mobile
+      const audioConstraints = isMobile 
+        ? { audio: true }  // Simple constraint for mobile
+        : {
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: true,
+            },
+          }
+      
+      const stream = await navigator.mediaDevices.getUserMedia(audioConstraints)
       console.log('Got media stream with tracks:', stream.getAudioTracks().length)
       mediaStreamRef.current = stream
       

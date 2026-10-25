@@ -90,6 +90,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const recordingStartTimeRef = useRef<number>(0)
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
+  const isRecordingRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
 
@@ -184,10 +185,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     recordingNotesRef.current = []
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
+    isRecordingRef.current = true
 
     setState((prev) => ({ ...prev, isRecording: true }))
 
     const analyzeLoop = () => {
+      if (!isRecordingRef.current) return
+
       const pitch = detectPitch()
 
       if (pitch && pitch.midiNote && pitch.clarity > 0.01) {
@@ -219,7 +223,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         lastNoteRef.current = null
       }
 
-      if (state.isRecording) {
+      if (isRecordingRef.current) {
         animationFrameRef.current = requestAnimationFrame(analyzeLoop)
       }
     }
@@ -228,8 +232,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [state.isInitialized, detectPitch, triggerNote])
 
   const stopRecording = useCallback((): RecordedLoop | null => {
-    if (!state.isRecording) return null
+    if (!isRecordingRef.current) return null
 
+    isRecordingRef.current = false
     setState((prev) => ({ ...prev, isRecording: false }))
 
     if (animationFrameRef.current) {

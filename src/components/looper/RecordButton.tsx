@@ -7,7 +7,7 @@ interface RecordButtonProps {
   isInitialized: boolean
   onPress: () => void
   onRelease: () => void
-  onInitialize: () => void
+  onInitialize: () => Promise<boolean>
 }
 
 export function RecordButton({
@@ -17,9 +17,12 @@ export function RecordButton({
   onRelease,
   onInitialize,
 }: RecordButtonProps) {
-  const handleInteraction = () => {
+  const handleInteraction = async () => {
     if (!isInitialized) {
-      onInitialize()
+      const success = await onInitialize()
+      if (success) {
+        onPress()
+      }
       return
     }
 

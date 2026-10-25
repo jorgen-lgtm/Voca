@@ -60,7 +60,7 @@ export default function UpgradePage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">You&apos;re a Pro!</h1>
-          <p className="text-gray-400 mb-8">Thank you for supporting Loop Station</p>
+          <p className="text-gray-400 mb-8">Thank you for supporting HumWeave</p>
           <motion.button
             onClick={() => router.push('/')}
             whileHover={{ scale: 1.05 }}
@@ -105,7 +105,7 @@ export default function UpgradePage() {
             </span>
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Unlock the full potential of Loop Station with MIDI export, unlimited projects, and more.
+            Unlock the full potential of HumWeave with MIDI export, unlimited projects, and more.
           </p>
         </motion.div>
 

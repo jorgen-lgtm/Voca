@@ -1,7 +1,7 @@
 {
-  "name": "Loop Station",
-  "short_name": "LoopStation",
-  "description": "Voice to MIDI loop station",
+  "name": "HumWeave",
+  "short_name": "HumWeave",
+  "description": "Voice to MIDI - Hum, weave, create music",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a2e",

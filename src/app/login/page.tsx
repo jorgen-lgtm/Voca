@@ -74,8 +74,8 @@ export default function LoginPage() {
               />
             </svg>
           </motion.div>
-          <h1 className="text-3xl font-bold text-white mb-2">Loop Station</h1>
-          <p className="text-gray-400">Voice to MIDI. Loop. Create.</p>
+          <h1 className="text-3xl font-bold text-white mb-2">HumWeave</h1>
+          <p className="text-gray-400">Hum. Weave. Create.</p>
         </div>
 
         <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-8 border border-gray-700/50">

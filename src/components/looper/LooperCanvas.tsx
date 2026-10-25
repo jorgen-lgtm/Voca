@@ -75,7 +75,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           animate={{ opacity: 1, x: 0 }}
           className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"
         >
-          Loop Station
+          HumWeave
         </motion.div>
 
         {loops.length > 0 && (

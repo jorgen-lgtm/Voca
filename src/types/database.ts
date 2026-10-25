@@ -10,6 +10,7 @@ export interface MidiNote {
 export interface MidiData {
   notes: MidiNote[]
   duration: number
+  volume?: number
 }
 
 export type Json =

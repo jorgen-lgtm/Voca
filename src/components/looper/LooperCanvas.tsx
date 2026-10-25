@@ -43,6 +43,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     setCurrentInstrument,
     toggleMetronome,
     toggleMetronomeAudio,
+    setLoopVolume,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const handleSave = () => {
@@ -227,6 +228,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             onSwipeLeft={() => handleSwipeInstrument(loop.id, 'left')}
             onSwipeRight={() => handleSwipeInstrument(loop.id, 'right')}
             onDelete={() => deleteLoop(loop.id)}
+            onVolumeChange={(volume) => setLoopVolume(loop.id, volume)}
           />
         ))}
 

@@ -99,6 +99,7 @@ export function useProjects() {
       midi_data: {
         notes: loop.notes,
         duration: loop.duration,
+        volume: loop.volume,
       } as MidiData,
       is_muted: false,
     }))
@@ -194,6 +195,7 @@ export function useProjects() {
       notes: track.midi_data.notes,
       duration: track.midi_data.duration,
       color: getInstrumentColor(track.instrument_type),
+      volume: track.midi_data.volume ?? 1,
     }))
   }, [])
 

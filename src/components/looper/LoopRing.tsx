@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useAnimation, PanInfo } from 'framer-motion'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RecordedLoop } from '@/types/audio'
 import type { InstrumentType } from '@/types/database'
 
@@ -13,6 +13,7 @@ interface LoopRingProps {
   onSwipeLeft: () => void
   onSwipeRight: () => void
   onDelete: () => void
+  onVolumeChange?: (volume: number) => void
 }
 
 const INSTRUMENT_ICONS: Record<InstrumentType, string> = {
@@ -32,9 +33,11 @@ export function LoopRing({
   onSwipeLeft,
   onSwipeRight,
   onDelete,
+  onVolumeChange,
 }: LoopRingProps) {
   const controls = useAnimation()
   const ringRef = useRef<HTMLDivElement>(null)
+  const [showVolume, setShowVolume] = useState(false)
   
   const baseRadius = 100 + index * 35
   const strokeWidth = 8
@@ -144,7 +147,7 @@ export function LoopRing({
       </svg>
 
       <motion.div
-        className="absolute flex items-center justify-center text-lg"
+        className="absolute flex items-center justify-center text-lg cursor-pointer"
         style={{
           left: baseRadius + strokeWidth - 12,
           top: -8,
@@ -158,9 +161,70 @@ export function LoopRing({
           duration: 0.5,
           repeat: isPlaying ? Infinity : 0,
         }}
+        onClick={(e) => {
+          e.stopPropagation()
+          setShowVolume(!showVolume)
+        }}
+        title="Klicka för volymkontroll"
       >
         {INSTRUMENT_ICONS[loop.instrumentType]}
       </motion.div>
+
+      {showVolume && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          className="absolute z-50 bg-gray-800/95 backdrop-blur-sm rounded-xl p-3 shadow-xl border border-gray-600/50"
+          style={{
+            left: baseRadius + strokeWidth + 20,
+            top: baseRadius + strokeWidth - 40,
+            minWidth: 120,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm">{INSTRUMENT_ICONS[loop.instrumentType]}</span>
+            <span className="text-xs text-gray-300">{Math.round((loop.volume || 1) * 100)}%</span>
+          </div>
+          
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={(loop.volume || 1) * 100}
+            onChange={(e) => onVolumeChange?.(parseInt(e.target.value) / 100)}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+          />
+          
+          <div className="flex justify-between mt-2 gap-1">
+            <button
+              onClick={() => onVolumeChange?.(0)}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+            >
+              🔇
+            </button>
+            <button
+              onClick={() => onVolumeChange?.(0.5)}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+            >
+              50%
+            </button>
+            <button
+              onClick={() => onVolumeChange?.(1)}
+              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+            >
+              100%
+            </button>
+            <button
+              onClick={() => setShowVolume(false)}
+              className="px-2 py-1 text-xs bg-red-600/50 hover:bg-red-600 rounded transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   )
 }

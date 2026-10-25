@@ -22,6 +22,7 @@ export interface RecordedLoop {
   notes: MidiNote[]
   duration: number
   color: string
+  volume: number
 }
 
 export interface AudioEngineConfig {

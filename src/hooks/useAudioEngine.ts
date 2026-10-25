@@ -574,6 +574,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       notes: [...recordingNotesRef.current],
       duration: recordingDuration,
       color: INSTRUMENT_COLORS[currentInstrument],
+      volume: 1,
     }
 
     setLoops((prev) => [...prev, newLoop])
@@ -590,7 +591,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       loopPartRef.current.dispose()
     }
 
-    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number }> = []
+    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number; volume: number }> = []
 
     loops.forEach((loop) => {
       if (loop.notes.length > 0) {
@@ -601,6 +602,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             duration: note.duration,
             instrument: loop.instrumentType,
             midiNote: note.pitch,
+            volume: loop.volume,
           })
         })
       }
@@ -612,10 +614,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       duration: e.duration,
       instrument: e.instrument,
       midiNote: e.midiNote,
+      volume: e.volume,
     }))
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
+      const velocity = event.volume || 1
+      
       if (event.instrument === 'drums' && drumKitRef.current) {
         const midiToDrum: Record<number, 'kick' | 'snare' | 'hihat'> = {
           36: 'kick',
@@ -623,6 +628,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
           42: 'hihat',
         }
         const drumType = midiToDrum[event.midiNote] || 'snare'
+        
+        const currentVolume = drumKitRef.current[drumType].volume.value
+        drumKitRef.current[drumType].volume.value = currentVolume + (20 * Math.log10(velocity))
         
         switch (drumType) {
           case 'kick':
@@ -635,10 +643,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             drumKitRef.current.hihat.triggerAttackRelease('C4', '32n', time)
             break
         }
+        
+        drumKitRef.current[drumType].volume.value = currentVolume
       } else {
         const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
         if (instrument && 'triggerAttackRelease' in instrument) {
-          instrument.triggerAttackRelease(event.note, event.duration, time)
+          instrument.triggerAttackRelease(event.note, event.duration, time, velocity)
         }
       }
     }, partEvents.map((e) => [e.time, e]))
@@ -675,6 +685,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const deleteLoop = useCallback((loopId: string) => {
     setLoops((prev) => prev.filter((loop) => loop.id !== loopId))
+  }, [])
+
+  const setLoopVolume = useCallback((loopId: string, volume: number) => {
+    setLoops((prev) => prev.map((loop) => 
+      loop.id === loopId ? { ...loop, volume: Math.max(0, Math.min(1, volume)) } : loop
+    ))
   }, [])
 
   const clearAllLoops = useCallback(() => {
@@ -827,6 +843,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     triggerNote,
     toggleMetronome,
     toggleMetronomeAudio,
+    setLoopVolume,
   }
 }
 

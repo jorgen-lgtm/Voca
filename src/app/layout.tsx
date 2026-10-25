@@ -8,13 +8,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Loop Station - Voice to MIDI",
+  title: "HumWeave - Voice to MIDI",
   description: "Transform your voice into music with real-time pitch detection and looping",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Loop Station",
+    title: "HumWeave",
   },
 };
 

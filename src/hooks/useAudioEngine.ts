@@ -64,9 +64,10 @@ function createInstrument(type: InstrumentType): Tone.PolySynth | Tone.MembraneS
 interface UseAudioEngineProps {
   tempo?: number
   loopBars?: number
+  initialLoops?: RecordedLoop[]
 }
 
-export function useAudioEngine({ tempo = 120, loopBars = 4 }: UseAudioEngineProps = {}) {
+export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }: UseAudioEngineProps = {}) {
   const [state, setState] = useState<AudioEngineState>({
     isInitialized: false,
     isRecording: false,
@@ -77,7 +78,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4 }: UseAudioEngineProp
   })
 
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
-  const [loops, setLoops] = useState<RecordedLoop[]>([])
+  const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('synth')
 
   const audioContextRef = useRef<AudioContext | null>(null)

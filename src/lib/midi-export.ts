@@ -114,7 +114,7 @@ export function exportLoopsToMidi(loops: RecordedLoop[], tempo: number): Uint8Ar
   return result
 }
 
-export function downloadMidiFile(midiData: Uint8Array, filename: string = 'loop-station-export.mid') {
+export function downloadMidiFile(midiData: Uint8Array, filename: string = 'humweave-export.mid') {
   const blob = new Blob([new Uint8Array(midiData)], { type: 'audio/midi' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -143,7 +143,7 @@ export function exportLoopsToJson(loops: RecordedLoop[], tempo: number): string 
   )
 }
 
-export function downloadJsonFile(json: string, filename: string = 'loop-station-export.json') {
+export function downloadJsonFile(json: string, filename: string = 'humweave-export.json') {
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

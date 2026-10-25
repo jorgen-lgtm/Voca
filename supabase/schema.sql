@@ -1,4 +1,4 @@
--- Loop Station Database Schema
+-- HumWeave Database Schema
 -- Run this in Supabase SQL Editor
 
 -- Enable UUID extension

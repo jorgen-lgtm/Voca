@@ -1,33 +1,51 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { LooperCanvas } from '@/components/looper'
 import { useAuth } from '@/hooks/useAuth'
-import { createClient } from '@/lib/supabase/client'
+import { useProjects } from '@/hooks/useProjects'
+import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
-  const { user, profile, loading, signOut, isPro } = useAuth()
+  const { user, loading, signOut, isPro } = useAuth()
+  const { createProject, saveLoopsToProject, loading: saving } = useProjects()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [projectTitle, setProjectTitle] = useState('')
+  const [pendingLoops, setPendingLoops] = useState<RecordedLoop[]>([])
+  const [pendingTempo, setPendingTempo] = useState(120)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
-  const handleSave = async () => {
+  const handleSave = async (loops: RecordedLoop[], tempo: number) => {
     if (!user) {
       router.push('/login')
       return
     }
 
-    console.log('Saving project...')
+    setPendingLoops(loops)
+    setPendingTempo(tempo)
+    setProjectTitle(`Loop Session ${new Date().toLocaleDateString('sv-SE')}`)
+    setShowSaveModal(true)
   }
 
-  const handleExport = async () => {
-    if (!isPro) {
-      alert('Export to MIDI requires a Pro subscription')
-      return
+  const handleConfirmSave = async () => {
+    if (!projectTitle.trim()) return
+
+    const project = await createProject(projectTitle.trim(), pendingTempo)
+    if (project) {
+      const success = await saveLoopsToProject(project.id, pendingLoops)
+      if (success) {
+        setSaveSuccess(true)
+        setTimeout(() => {
+          setShowSaveModal(false)
+          setSaveSuccess(false)
+          setProjectTitle('')
+        }, 1500)
+      }
     }
-    console.log('Exporting MIDI...')
   }
 
   if (loading) {
@@ -117,6 +135,118 @@ export default function HomePage() {
       )}
 
       <LooperCanvas onSave={handleSave} isPro={isPro} />
+
+      <AnimatePresence>
+        {showSaveModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => !saving && setShowSaveModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="w-full max-w-sm rounded-2xl bg-gray-800 border border-gray-700 shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {saveSuccess ? (
+                <div className="p-8 text-center">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center"
+                  >
+                    <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </motion.div>
+                  <h3 className="text-lg font-medium text-white">Project Saved!</h3>
+                  <p className="text-sm text-gray-400 mt-1">Your loops have been saved successfully.</p>
+                </div>
+              ) : (
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold text-white">Save Project</h2>
+                    <button
+                      onClick={() => setShowSaveModal(false)}
+                      disabled={saving}
+                      className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="project-title" className="block text-sm font-medium text-gray-300 mb-2">
+                        Project Name
+                      </label>
+                      <input
+                        id="project-title"
+                        type="text"
+                        value={projectTitle}
+                        onChange={(e) => setProjectTitle(e.target.value)}
+                        placeholder="Enter project name..."
+                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                        disabled={saving}
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3 text-sm text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        </svg>
+                        {pendingLoops.length} {pendingLoops.length === 1 ? 'track' : 'tracks'}
+                      </span>
+                      <span>•</span>
+                      <span>{pendingTempo} BPM</span>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <motion.button
+                        onClick={() => setShowSaveModal(false)}
+                        disabled={saving}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 px-4 rounded-xl bg-gray-700/50 text-gray-300 font-medium hover:bg-gray-700 transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        onClick={handleConfirmSave}
+                        disabled={saving || !projectTitle.trim()}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium hover:from-purple-700 hover:to-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {saving ? (
+                          <>
+                            <motion.div
+                              className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                            />
+                            Saving...
+                          </>
+                        ) : (
+                          'Save Project'
+                        )}
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   )
 }

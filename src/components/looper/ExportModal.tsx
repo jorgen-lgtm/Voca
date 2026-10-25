@@ -22,7 +22,7 @@ export function ExportModal({ isOpen, onClose, loops, tempo, isPro }: ExportModa
     setExporting(true)
     try {
       const midiData = exportLoopsToMidi(loops, tempo)
-      downloadMidiFile(midiData, `loop-station-${Date.now()}.mid`)
+      downloadMidiFile(midiData, `humweave-${Date.now()}.mid`)
     } catch (error) {
       console.error('Export failed:', error)
     }
@@ -34,7 +34,7 @@ export function ExportModal({ isOpen, onClose, loops, tempo, isPro }: ExportModa
     setExporting(true)
     try {
       const json = exportLoopsToJson(loops, tempo)
-      downloadJsonFile(json, `loop-station-${Date.now()}.json`)
+      downloadJsonFile(json, `humweave-${Date.now()}.json`)
     } catch (error) {
       console.error('Export failed:', error)
     }

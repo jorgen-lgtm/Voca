@@ -444,10 +444,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       let drumType: 'kick' | 'snare' | 'hihat'
       
-      if (lowRatio > 0.4) {
-        drumType = 'kick'
-      } else if (highRatio > 0.25) {
+      // Hi-hat needs dominant high frequencies (>40%)
+      // Kick needs dominant low frequencies (>45%)
+      // Everything else is snare
+      if (highRatio > 0.4 && highRatio > lowRatio) {
         drumType = 'hihat'
+      } else if (lowRatio > 0.45) {
+        drumType = 'kick'
       } else {
         drumType = 'snare'
       }

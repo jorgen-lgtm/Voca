@@ -104,8 +104,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const initializeAudio = useCallback(async () => {
     try {
-      await Tone.start()
-      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('getUserMedia not supported')
+        alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Firefox.')
+        return false
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -115,6 +119,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       })
       mediaStreamRef.current = stream
 
+      await Tone.start()
       audioContextRef.current = new AudioContext()
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
@@ -152,6 +157,17 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return true
     } catch (error) {
       console.error('Failed to initialize audio:', error)
+      
+      if (error instanceof Error) {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          alert('Mikrofon-åtkomst nekad. Tillåt mikrofon i webbläsarens inställningar och ladda om sidan.')
+        } else if (error.name === 'NotFoundError') {
+          alert('Ingen mikrofon hittades. Anslut en mikrofon och ladda om sidan.')
+        } else {
+          alert(`Kunde inte starta ljud: ${error.message}`)
+        }
+      }
+      
       return false
     }
   }, [tempo])

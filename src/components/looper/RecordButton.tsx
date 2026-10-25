@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 
 interface RecordButtonProps {
@@ -20,9 +20,17 @@ export function RecordButton({
 }: RecordButtonProps) {
   const [isInitializing, setIsInitializing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const isHandlingRef = useRef(false)
 
-  const handleInteraction = useCallback(async (e: React.MouseEvent | React.TouchEvent) => {
+  const handleInteraction = useCallback(async (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
     e.preventDefault()
+    e.stopPropagation()
+    
+    // Prevent double-handling
+    if (isHandlingRef.current) return
+    isHandlingRef.current = true
+    setTimeout(() => { isHandlingRef.current = false }, 100)
+    
     setError(null)
     
     if (!isInitialized) {
@@ -70,8 +78,7 @@ export function RecordButton({
       />
 
       <motion.button
-        onClick={handleInteraction}
-        onTouchEnd={handleInteraction}
+        onPointerUp={handleInteraction}
         disabled={isInitializing}
         className={`relative w-28 h-28 rounded-full flex items-center justify-center touch-none select-none ${
           isInitializing

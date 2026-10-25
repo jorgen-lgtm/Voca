@@ -1,17 +1,43 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion } from 'framer-motion'
+
+const COOLDOWN_SECONDS = 60
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const supabase = createClient()
 
+  useEffect(() => {
+    const lastSent = localStorage.getItem('lastMagicLinkSent')
+    if (lastSent) {
+      const elapsed = Math.floor((Date.now() - parseInt(lastSent)) / 1000)
+      if (elapsed < COOLDOWN_SECONDS) {
+        setCooldown(COOLDOWN_SECONDS - elapsed)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [cooldown])
+
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (cooldown > 0) {
+      setMessage({ type: 'error', text: `Please wait ${cooldown} seconds before requesting another link.` })
+      return
+    }
+    
     setLoading(true)
     setMessage(null)
 
@@ -23,9 +49,17 @@ export default function LoginPage() {
     })
 
     if (error) {
-      setMessage({ type: 'error', text: error.message })
+      if (error.message.includes('rate') || error.status === 429) {
+        setMessage({ type: 'error', text: 'Too many requests. Please wait a minute and try again.' })
+        setCooldown(60)
+        localStorage.setItem('lastMagicLinkSent', Date.now().toString())
+      } else {
+        setMessage({ type: 'error', text: error.message })
+      }
     } else {
-      setMessage({ type: 'success', text: 'Check your email for the login link!' })
+      setMessage({ type: 'success', text: 'Check your email for the login link! (May take a minute)' })
+      setCooldown(COOLDOWN_SECONDS)
+      localStorage.setItem('lastMagicLinkSent', Date.now().toString())
     }
     setLoading(false)
   }
@@ -82,12 +116,12 @@ export default function LoginPage() {
 
             <motion.button
               type="submit"
-              disabled={loading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              disabled={loading || cooldown > 0}
+              whileHover={{ scale: loading || cooldown > 0 ? 1 : 1.02 }}
+              whileTap={{ scale: loading || cooldown > 0 ? 1 : 0.98 }}
               className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {loading ? 'Sending...' : 'Send Magic Link'}
+              {loading ? 'Sending...' : cooldown > 0 ? `Wait ${cooldown}s` : 'Send Magic Link'}
             </motion.button>
           </form>
 

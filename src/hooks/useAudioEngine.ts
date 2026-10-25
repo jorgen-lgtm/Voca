@@ -31,36 +31,34 @@ const DRUM_MIDI_MAP: Record<string, number> = {
 }
 
 function createDrumKit(masterVolume: Tone.Volume): DrumKit {
-  // Kick with heavy sub-bass
-  const kickLowpass = new Tone.Filter(100, 'lowpass').connect(masterVolume)
-  const kickCompressor = new Tone.Compressor(-30, 6).connect(kickLowpass)
+  // Limiter to prevent clipping
+  const drumLimiter = new Tone.Limiter(-6).connect(masterVolume)
+  
+  // Clean kick drum
   const kick = new Tone.MembraneSynth({
-    pitchDecay: 0.08,
-    octaves: 10,
+    pitchDecay: 0.05,
+    octaves: 6,
     oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.6, sustain: 0.01, release: 1.6 },
-  }).connect(kickCompressor)
-  kick.volume.value = 2
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.4 },
+  }).connect(drumLimiter)
+  kick.volume.value = -4
 
-  // Snare with body and snap
-  const snareReverb = new Tone.Reverb({ decay: 0.4, wet: 0.1 }).connect(masterVolume)
-  const snareFilter = new Tone.Filter(5000, 'highpass').connect(snareReverb)
+  // Clean snare
   const snare = new Tone.NoiseSynth({
     noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.2 },
-  }).connect(snareFilter)
-  snare.volume.value = -6
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
+  }).connect(drumLimiter)
+  snare.volume.value = -10
 
-  // Crisp hi-hat
-  const hihatFilter = new Tone.Filter(8000, 'highpass').connect(masterVolume)
+  // Clean hi-hat
   const hihat = new Tone.MetalSynth({
-    envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.05 },
+    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.03 },
     harmonicity: 5.1,
-    modulationIndex: 40,
-    resonance: 5000,
-    octaves: 1.2,
-  }).connect(hihatFilter)
-  hihat.volume.value = -10
+    modulationIndex: 20,
+    resonance: 4000,
+    octaves: 1,
+  }).connect(drumLimiter)
+  hihat.volume.value = -14
 
   return { kick, snare, hihat }
 }
@@ -68,105 +66,98 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
 type InstrumentSynth = Tone.PolySynth | Tone.Sampler
 
 function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume): InstrumentSynth {
-  // Better reverb and compression for all instruments
-  const reverb = new Tone.Reverb({ decay: 1.8, wet: 0.25 }).connect(masterVolume)
-  const compressor = new Tone.Compressor(-20, 4).connect(reverb)
+  // Simplified effects chain - limiter to prevent clipping
+  const limiter = new Tone.Limiter(-3).connect(masterVolume)
+  const reverb = new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(limiter)
   
   switch (type) {
     case 'bass': {
-      // Deep, punchy bass with sub frequencies
-      const bassFilter = new Tone.Filter(800, 'lowpass').connect(compressor)
-      const bassEQ = new Tone.EQ3({ low: 6, mid: -2, high: -6 }).connect(bassFilter)
+      // Clean bass
+      const bassFilter = new Tone.Filter(600, 'lowpass').connect(reverb)
       const synth = new Tone.MonoSynth({
-        oscillator: { type: 'fatsawtooth', count: 2, spread: 10 },
-        envelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.5 },
-        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.5, baseFrequency: 150, octaves: 2.5 },
-      }).connect(bassEQ)
-      synth.volume.value = -2
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.4 },
+        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.4, baseFrequency: 200, octaves: 2 },
+      }).connect(bassFilter)
+      synth.volume.value = -6
       return synth as unknown as InstrumentSynth
     }
     case 'piano': {
-      // Rich piano with harmonics
-      const pianoEQ = new Tone.EQ3({ low: 2, mid: 0, high: 3 }).connect(compressor)
-      const chorus = new Tone.Chorus(1.5, 2.5, 0.3).connect(pianoEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(chorus)
+      // Clean piano
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 8
       synth.set({
-        oscillator: { type: 'triangle8' },
-        envelope: { attack: 0.002, decay: 1.2, sustain: 0.1, release: 1.5 },
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.005, decay: 1.0, sustain: 0.1, release: 1.0 },
       })
-      synth.volume.value = -2
+      synth.volume.value = -8
       return synth
     }
     case 'guitar': {
-      // Warm acoustic guitar tone
-      const guitarEQ = new Tone.EQ3({ low: 3, mid: 2, high: -2 }).connect(compressor)
-      const guitarChorus = new Tone.Chorus(0.5, 1.5, 0.2).connect(guitarEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(guitarChorus)
+      // Clean guitar
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'fmtriangle', modulationType: 'triangle' },
-        envelope: { attack: 0.001, decay: 0.6, sustain: 0.15, release: 1.2 },
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.002, decay: 0.5, sustain: 0.1, release: 0.8 },
       })
-      synth.volume.value = -2
+      synth.volume.value = -8
       return synth
     }
     case 'strings': {
-      // Lush orchestral strings
-      const stringsEQ = new Tone.EQ3({ low: 0, mid: 3, high: 2 }).connect(compressor)
-      const stringsChorus = new Tone.Chorus(2, 3.5, 0.5).connect(stringsEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(stringsChorus)
+      // Softer strings
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'fatsawtooth', spread: 40, count: 4 },
-        envelope: { attack: 0.4, decay: 0.4, sustain: 0.85, release: 2.0 },
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.3, decay: 0.3, sustain: 0.7, release: 1.5 },
       })
-      synth.volume.value = -4
+      synth.volume.value = -10
       return synth
     }
     case 'brass': {
-      // Bright brass section
-      const brassEQ = new Tone.EQ3({ low: 2, mid: 4, high: 2 }).connect(compressor)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(brassEQ)
+      // Clean brass
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 4
       synth.set({
-        oscillator: { type: 'fatsawtooth', spread: 15, count: 2 },
-        envelope: { attack: 0.04, decay: 0.15, sustain: 0.75, release: 0.3 },
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.05, decay: 0.2, sustain: 0.6, release: 0.3 },
       })
-      synth.volume.value = -2
+      synth.volume.value = -8
       return synth
     }
     case 'organ': {
-      // Full church organ with multiple drawbars
-      const organEQ = new Tone.EQ3({ low: 4, mid: 2, high: 0 }).connect(compressor)
-      const organChorus = new Tone.Chorus(3, 2, 0.3).connect(organEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(organChorus)
+      // Clean organ
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'fatsine', spread: 20, count: 3 },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.95, release: 0.2 },
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0.9, release: 0.2 },
       })
-      synth.volume.value = -2
+      synth.volume.value = -8
       return synth
     }
     case 'voice': {
-      // Warm vocal/choir sound
-      const voiceEQ = new Tone.EQ3({ low: 0, mid: 4, high: 2 }).connect(compressor)
-      const voiceChorus = new Tone.Chorus(2, 3, 0.4).connect(voiceEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(voiceChorus)
+      // Clean vocal sound
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 4
       synth.set({
-        oscillator: { type: 'fatsine', spread: 25, count: 3 },
-        envelope: { attack: 0.08, decay: 0.2, sustain: 0.8, release: 0.4 },
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.1, decay: 0.2, sustain: 0.7, release: 0.4 },
       })
-      synth.volume.value = 0
+      synth.volume.value = -6
       return synth
     }
     case 'synth':
     default: {
-      // Rich analog-style synth
-      const synthEQ = new Tone.EQ3({ low: 2, mid: 2, high: 4 }).connect(compressor)
-      const synthChorus = new Tone.Chorus(1.5, 2.5, 0.4).connect(synthEQ)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(synthChorus)
+      // Clean synth
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'fatsawtooth', spread: 25, count: 3 },
-        envelope: { attack: 0.03, decay: 0.25, sustain: 0.55, release: 0.6 },
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.5 },
       })
-      synth.volume.value = -2
+      synth.volume.value = -8
       return synth
     }
   }

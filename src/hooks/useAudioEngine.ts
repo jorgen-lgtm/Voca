@@ -174,7 +174,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.008
+    const minVolume = 0.002
     if (rms < minVolume) {
       setCurrentPitch(null)
       return null
@@ -182,7 +182,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const pitchResult = pitchDetectorRef.current(buffer)
 
-    if (pitchResult && pitchResult.freq > 70 && pitchResult.freq < 1000 && pitchResult.probability > 0.9) {
+    if (pitchResult && pitchResult.freq > 60 && pitchResult.freq < 1500 && pitchResult.probability > 0.5) {
       const frequency = pitchResult.freq
       const midiNote = frequencyToMidi(frequency)
       const noteName = midiToNoteName(midiNote)
@@ -228,7 +228,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.03) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.01) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

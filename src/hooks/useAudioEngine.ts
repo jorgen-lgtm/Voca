@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
-import * as tf from '@tensorflow/tfjs'
+import * as Pitchfinder from 'pitchfinder'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 
@@ -175,18 +175,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const drumAnalyserRef = useRef<AnalyserNode | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
-  const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
-  const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
-  const aiReadyRef = useRef<boolean>(false)
+  const pitchDetectorRef = useRef<((buffer: Float32Array) => number | null) | null>(null)
   const instrumentsRef = useRef<Map<InstrumentType, Tone.Sampler | Tone.PolySynth | null>>(new Map())
   const drumKitRef = useRef<DrumKit | null>(null)
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
-  const lastDrumHitTimeRef = useRef<number>(0)
-  const prevRmsRef = useRef<number>(0)
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
@@ -223,44 +218,28 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       mediaStreamRef.current = stream
 
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      audioContextRef.current = new AudioContextClass()
+      audioContextRef.current = new AudioContextClass({ sampleRate: 44100 })
       
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume()
       }
-      console.log('AudioContext state:', audioContextRef.current.state)
+      console.log('AudioContext state:', audioContextRef.current.state, 'Sample rate:', audioContextRef.current.sampleRate)
+      
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
-      // Filtered path for pitch detection (voice)
-      highPassFilterRef.current = audioContextRef.current.createBiquadFilter()
-      highPassFilterRef.current.type = 'highpass'
-      highPassFilterRef.current.frequency.value = 100
-      highPassFilterRef.current.Q.value = 1.0
-      
-      lowPassFilterRef.current = audioContextRef.current.createBiquadFilter()
-      lowPassFilterRef.current.type = 'lowpass'
-      lowPassFilterRef.current.frequency.value = 800
-      lowPassFilterRef.current.Q.value = 1.0
-      
+      // Analyser for pitch detection
       analyserRef.current = audioContextRef.current.createAnalyser()
       analyserRef.current.fftSize = 2048
-      analyserRef.current.smoothingTimeConstant = 0.5
+      analyserRef.current.smoothingTimeConstant = 0.1
+      source.connect(analyserRef.current)
       
-      source.connect(highPassFilterRef.current)
-      highPassFilterRef.current.connect(lowPassFilterRef.current)
-      lowPassFilterRef.current.connect(analyserRef.current)
+      // Initialize YIN pitch detector (more accurate than autocorrelation)
+      pitchDetectorRef.current = Pitchfinder.YIN({ 
+        sampleRate: audioContextRef.current.sampleRate,
+        threshold: 0.1,
+      })
       
-      // Unfiltered path for drum detection (full frequency range)
-      drumAnalyserRef.current = audioContextRef.current.createAnalyser()
-      drumAnalyserRef.current.fftSize = 4096
-      drumAnalyserRef.current.smoothingTimeConstant = 0.3
-      source.connect(drumAnalyserRef.current)
-      
-      console.log('Audio analysers initialized: pitch + drums')
-
-      await tf.ready()
-      console.log('TensorFlow.js ready:', tf.getBackend())
-      aiReadyRef.current = true
+      console.log('YIN pitch detector initialized')
 
       masterVolumeRef.current = new Tone.Volume(0).toDestination()
 
@@ -304,7 +283,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [tempo])
 
   const detectPitch = useCallback(() => {
-    if (!analyserRef.current || !audioContextRef.current) {
+    if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
       return null
     }
 
@@ -312,13 +291,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
 
+    // Check volume level
     let rms = 0
     for (let i = 0; i < buffer.length; i++) {
       rms += buffer[i] * buffer[i]
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.025
+    const minVolume = 0.015
     if (rms < minVolume) {
       lastDetectedPitchRef.current = null
       pitchStabilityCountRef.current = 0
@@ -326,11 +306,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return null
     }
 
-    const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate)
+    // Use YIN algorithm for pitch detection
+    const frequency = pitchDetectorRef.current(buffer)
 
-    if (frequency > 0 && frequency > 80 && frequency < 800) {
+    if (frequency && frequency > 65 && frequency < 1000) {
       const midiNote = frequencyToMidi(frequency)
       
+      // Require 2 stable readings (faster than before)
       if (lastDetectedPitchRef.current === midiNote) {
         pitchStabilityCountRef.current++
       } else {
@@ -338,9 +320,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         lastDetectedPitchRef.current = midiNote
       }
 
-      if (pitchStabilityCountRef.current >= 3) {
+      if (pitchStabilityCountRef.current >= 2) {
         const noteName = midiToNoteName(midiNote)
-        const clarity = Math.min(rms * 10, 1)
+        const clarity = Math.min(rms * 15, 1)
 
         const result: PitchDetectionResult = {
           frequency,
@@ -354,7 +336,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       } else {
         setCurrentPitch({
           frequency,
-          clarity: Math.min(rms * 10, 1),
+          clarity: Math.min(rms * 15, 1),
           midiNote: null,
           noteName: null,
         })
@@ -376,92 +358,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [currentInstrument])
 
-  const detectDrumHit = useCallback((): { hit: boolean; drumType: 'kick' | 'snare' | 'hihat' | null } => {
-    if (!drumAnalyserRef.current || !audioContextRef.current) {
-      return { hit: false, drumType: null }
-    }
-
-    const bufferLength = drumAnalyserRef.current.fftSize
-    const buffer = new Float32Array(bufferLength)
-    drumAnalyserRef.current.getFloatTimeDomainData(buffer)
-
-    let rms = 0
-    for (let i = 0; i < buffer.length; i++) {
-      rms += buffer[i] * buffer[i]
-    }
-    rms = Math.sqrt(rms / buffer.length)
-
-    const prevRms = prevRmsRef.current
-    prevRmsRef.current = rms
-
-    const currentTime = Tone.now()
-    const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
-    const minTimeBetweenHits = 0.08
-
-    if (timeSinceLastHit < minTimeBetweenHits) {
-      return { hit: false, drumType: null }
-    }
-
-    const volumeThreshold = 0.03
-    const spikeRatio = 1.5
-
-    if (rms > volumeThreshold && rms > prevRms * spikeRatio) {
-      lastDrumHitTimeRef.current = currentTime
-
-      const freqData = new Uint8Array(drumAnalyserRef.current.frequencyBinCount)
-      drumAnalyserRef.current.getByteFrequencyData(freqData)
-
-      const sampleRate = audioContextRef.current.sampleRate
-      const binSize = sampleRate / drumAnalyserRef.current.fftSize
-
-      let lowEnergy = 0    // 20-250 Hz (kick)
-      let midEnergy = 0    // 250-4000 Hz (snare)
-      let highEnergy = 0   // 4000-12000 Hz (hihat/cymbal)
-
-      for (let i = 0; i < freqData.length; i++) {
-        const freq = i * binSize
-        const energy = freqData[i] * freqData[i] // Square for emphasis
-
-        if (freq >= 20 && freq < 250) {
-          lowEnergy += energy
-        } else if (freq >= 250 && freq < 4000) {
-          midEnergy += energy
-        } else if (freq >= 4000 && freq < 12000) {
-          highEnergy += energy
-        }
-      }
-
-      const total = lowEnergy + midEnergy + highEnergy
-      if (total === 0) {
-        return { hit: true, drumType: 'snare' }
-      }
-
-      const lowRatio = lowEnergy / total
-      const midRatio = midEnergy / total
-      const highRatio = highEnergy / total
-
-      console.log(`Drum freq analysis - Low: ${(lowRatio*100).toFixed(1)}%, Mid: ${(midRatio*100).toFixed(1)}%, High: ${(highRatio*100).toFixed(1)}%`)
-
-      let drumType: 'kick' | 'snare' | 'hihat'
-      
-      // Hi-hat needs dominant high frequencies (>40%)
-      // Kick needs dominant low frequencies (>45%)
-      // Everything else is snare
-      if (highRatio > 0.4 && highRatio > lowRatio) {
-        drumType = 'hihat'
-      } else if (lowRatio > 0.45) {
-        drumType = 'kick'
-      } else {
-        drumType = 'snare'
-      }
-
-      console.log(`Detected: ${drumType}`)
-      return { hit: true, drumType }
-    }
-
-    return { hit: false, drumType: null }
-  }, [])
-
   const triggerDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
     if (!drumKitRef.current) return
 
@@ -478,6 +374,27 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [])
 
+  // Manual drum hit recording - called when user taps drum buttons
+  const recordDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat') => {
+    if (!isRecordingRef.current) return
+    
+    const currentTime = Tone.now() - recordingStartTimeRef.current
+    const drumMidiMap = { kick: 36, snare: 38, hihat: 42 }
+    const midiNote = drumMidiMap[drumType]
+    
+    recordingNotesRef.current.push({
+      pitch: midiNote,
+      velocity: 100,
+      startTime: currentTime,
+      duration: 0.1,
+    })
+    
+    setLastDrumType(drumType)
+    setTimeout(() => setLastDrumType(null), 200)
+    
+    triggerDrumHit(drumType)
+  }, [triggerDrumHit])
+
   const startRecording = useCallback(() => {
     if (!state.isInitialized) return
 
@@ -490,8 +407,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     recordingNotesRef.current = []
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
-    lastDrumHitTimeRef.current = 0
-    prevRmsRef.current = 0
     isRecordingRef.current = true
 
     setState((prev) => ({ ...prev, isRecording: true }))
@@ -499,26 +414,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
 
-      if (currentInstrument === 'drums') {
-        const { hit, drumType } = detectDrumHit()
-        if (hit && drumType) {
-          const currentTime = Tone.now() - recordingStartTimeRef.current
-          
-          const drumMidiMap = { kick: 36, snare: 38, hihat: 42 }
-          const midiNote = drumMidiMap[drumType]
-          
-          setLastDrumType(drumType)
-          setTimeout(() => setLastDrumType(null), 300)
-          
-          recordingNotesRef.current.push({
-            pitch: midiNote,
-            velocity: 100,
-            startTime: currentTime,
-            duration: 0.1,
-          })
-          triggerDrumHit(drumType)
-        }
-      } else {
+      // For drums, we use manual button input (recordDrumHit)
+      // Only do pitch detection for melodic instruments
+      if (currentInstrument !== 'drums') {
         const pitch = detectPitch()
 
         if (pitch && pitch.midiNote && pitch.clarity > 0.1) {
@@ -557,7 +455,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     analyzeLoop()
-  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, detectDrumHit, triggerNote, triggerDrumHit])
+  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote])
 
   const stopRecording = useCallback((): RecordedLoop | null => {
     if (!isRecordingRef.current) return null
@@ -864,54 +762,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     cycleInstrument,
     setCurrentInstrument,
     triggerNote,
+    triggerDrumHit,
+    recordDrumHit,
     toggleMetronome,
     toggleMetronomeAudio,
     setLoopVolume,
   }
 }
 
-function autoCorrelate(buffer: Float32Array, sampleRate: number): number {
-  const SIZE = buffer.length
-  const MAX_SAMPLES = Math.floor(SIZE / 2)
-  let bestOffset = -1
-  let bestCorrelation = 0
-  let foundGoodCorrelation = false
-  const correlations = new Float32Array(MAX_SAMPLES)
-
-  let rms = 0
-  for (let i = 0; i < SIZE; i++) {
-    rms += buffer[i] * buffer[i]
-  }
-  rms = Math.sqrt(rms / SIZE)
-
-  if (rms < 0.02) return -1
-
-  let lastCorrelation = 1
-  for (let offset = 0; offset < MAX_SAMPLES; offset++) {
-    let correlation = 0
-
-    for (let i = 0; i < MAX_SAMPLES; i++) {
-      correlation += Math.abs(buffer[i] - buffer[i + offset])
-    }
-    correlation = 1 - correlation / MAX_SAMPLES
-    correlations[offset] = correlation
-
-    if (correlation > 0.9 && correlation > lastCorrelation) {
-      foundGoodCorrelation = true
-      if (correlation > bestCorrelation) {
-        bestCorrelation = correlation
-        bestOffset = offset
-      }
-    } else if (foundGoodCorrelation) {
-      const shift = (correlations[bestOffset + 1] - correlations[bestOffset - 1]) / correlations[bestOffset]
-      return sampleRate / (bestOffset + 8 * shift)
-    }
-    lastCorrelation = correlation
-  }
-
-  if (bestCorrelation > 0.01) {
-    return sampleRate / bestOffset
-  }
-
-  return -1
-}

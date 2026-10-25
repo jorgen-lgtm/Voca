@@ -7,6 +7,7 @@ import { LoopRing } from './LoopRing'
 import { InstrumentSelector } from './InstrumentSelector'
 import { TransportControls } from './TransportControls'
 import { PitchDisplay } from './PitchDisplay'
+import { DrumPads } from './DrumPads'
 import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
@@ -45,6 +46,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     toggleMetronome,
     toggleMetronomeAudio,
     setLoopVolume,
+    recordDrumHit,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const handleSave = () => {
@@ -246,6 +248,16 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           onInitialize={initializeAudio}
         />
       </div>
+
+      {currentInstrument === 'drums' && (
+        <div className="mb-6">
+          <DrumPads
+            isRecording={state.isRecording}
+            lastDrumType={lastDrumType}
+            onDrumHit={recordDrumHit}
+          />
+        </div>
+      )}
 
       <InstrumentSelector
         currentInstrument={currentInstrument}

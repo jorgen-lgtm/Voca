@@ -234,12 +234,16 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       source.connect(analyserRef.current)
       
       // Initialize YIN pitch detector (more accurate than autocorrelation)
+      const sampleRate = audioContextRef.current.sampleRate
+      console.log('Creating YIN detector with sample rate:', sampleRate)
+      
       pitchDetectorRef.current = Pitchfinder.YIN({ 
-        sampleRate: audioContextRef.current.sampleRate,
-        threshold: 0.1,
+        sampleRate: sampleRate,
+        threshold: 0.15,
+        probabilityThreshold: 0.1,
       })
       
-      console.log('YIN pitch detector initialized')
+      console.log('YIN pitch detector initialized:', pitchDetectorRef.current)
 
       masterVolumeRef.current = new Tone.Volume(0).toDestination()
 
@@ -284,6 +288,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const detectPitch = useCallback(() => {
     if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
+      console.log('Missing refs:', { 
+        analyser: !!analyserRef.current, 
+        audioCtx: !!audioContextRef.current, 
+        pitchDetector: !!pitchDetectorRef.current 
+      })
       return null
     }
 
@@ -293,12 +302,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     // Check volume level
     let rms = 0
+    let maxVal = 0
     for (let i = 0; i < buffer.length; i++) {
       rms += buffer[i] * buffer[i]
+      maxVal = Math.max(maxVal, Math.abs(buffer[i]))
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.015
+    const minVolume = 0.005
     if (rms < minVolume) {
       lastDetectedPitchRef.current = null
       pitchStabilityCountRef.current = 0
@@ -308,6 +319,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     // Use YIN algorithm for pitch detection
     const frequency = pitchDetectorRef.current(buffer)
+    
+    // Debug logging - show audio levels
+    console.log(`Audio: RMS=${rms.toFixed(4)}, Max=${maxVal.toFixed(4)}, Freq=${frequency?.toFixed(1) || 'null'}`)
 
     if (frequency && frequency > 65 && frequency < 1000) {
       const midiNote = frequencyToMidi(frequency)
@@ -419,7 +433,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       if (currentInstrument !== 'drums') {
         const pitch = detectPitch()
 
-        if (pitch && pitch.midiNote && pitch.clarity > 0.1) {
+        if (pitch && pitch.midiNote) {
           const currentTime = Tone.now() - recordingStartTimeRef.current
 
           if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

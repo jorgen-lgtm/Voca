@@ -104,7 +104,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
+          autoGainControl: true,
           sampleRate: 44100,
         },
       })
@@ -152,45 +152,28 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.005
+    const minVolume = 0.001
     if (rms < minVolume) {
-      pitchHistoryRef.current = []
-      stablePitchCountRef.current = 0
       setCurrentPitch(null)
       return null
     }
 
     const frequency = pitchDetectorRef.current(buffer)
 
-    if (frequency && frequency > 60 && frequency < 2000) {
+    if (frequency && frequency > 50 && frequency < 2000) {
       const midiNote = frequencyToMidi(frequency)
-      
-      pitchHistoryRef.current.push(midiNote)
-      if (pitchHistoryRef.current.length > 3) {
-        pitchHistoryRef.current.shift()
-      }
-
-      const allSame = pitchHistoryRef.current.length >= 2 && 
-        pitchHistoryRef.current.slice(-2).every(n => n === midiNote)
-
-      if (allSame) {
-        stablePitchCountRef.current++
-      } else {
-        stablePitchCountRef.current = 0
-      }
-
       const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 15, 1)
+      const clarity = Math.min(rms * 20, 1)
 
       const result: PitchDetectionResult = {
         frequency,
         clarity,
-        midiNote: stablePitchCountRef.current >= 1 ? midiNote : null,
-        noteName: stablePitchCountRef.current >= 1 ? noteName : null,
+        midiNote,
+        noteName,
       }
 
       setCurrentPitch(result)
-      return stablePitchCountRef.current >= 1 ? result : null
+      return result
     }
 
     pitchHistoryRef.current = []
@@ -224,7 +207,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.02) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.005) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

@@ -66,7 +66,7 @@ export default function HelpPage() {
 
           {/* Instruments */}
           <section className="mb-12">
-            <h2 className="text-2xl font-semibold mb-4 text-purple-300">🎹 Instruments (9 total)</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-purple-300">🎹 Instruments (10 total)</h2>
             <div className="grid md:grid-cols-3 gap-4">
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
@@ -131,6 +131,14 @@ export default function HelpPage() {
                 </div>
                 <p className="text-gray-400 text-sm">Speak and melody follows your intonation!</p>
               </div>
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-rose-500/30">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">🎤</span>
+                  <span className="font-semibold">Memo</span>
+                  <span className="text-xs bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full">NEW</span>
+                </div>
+                <p className="text-gray-400 text-sm">Ren ljudinspelning - fånga sångidéer utan tonkonvertering!</p>
+              </div>
             </div>
           </section>
 
@@ -190,8 +198,24 @@ export default function HelpPage() {
                 <p className="text-gray-400">Enable the metronome to stay in time. Visual beats show the current position. Toggle audio click on/off.</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
-                <h3 className="font-semibold text-lg mb-2">🤖 AI Assistant</h3>
-                <p className="text-gray-400">Use AI to enhance your loops: quantize notes to the beat, smooth melodies, and snap to musical scales.</p>
+                <h3 className="font-semibold text-lg mb-2">🤖 AI Producer (Studio AI)</h3>
+                <p className="text-gray-400">Din personliga musikproducent! AI:n kan:</p>
+                <ul className="text-gray-400 ml-6 mt-2 list-disc">
+                  <li>Polera och förbättra dina inspelningar</li>
+                  <li>Föreslå nästa instrument att lägga till</li>
+                  <li>Bygga vidare på din melodi med bas, trummor och harmonier</li>
+                  <li>Kvantisera noter till rätt beat</li>
+                </ul>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-rose-500/30">
+                <h3 className="font-semibold text-lg mb-2">🎤 Memo Mode</h3>
+                <p className="text-gray-400">Perfekt för artister som vill fånga idéer snabbt:</p>
+                <ul className="text-gray-400 ml-6 mt-2 list-disc">
+                  <li>Spela in din röst/sång som ren ljudfil</li>
+                  <li>Ingen tonkonvertering - exakt vad du sjunger</li>
+                  <li>Fungerar som en röstmemo för låtidéer</li>
+                  <li>Kan kombineras med andra instrument-loopar</li>
+                </ul>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4">
                 <h3 className="font-semibold text-lg mb-2">💾 Export</h3>

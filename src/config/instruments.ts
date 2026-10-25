@@ -104,6 +104,16 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     octaveRange: [2, 6],
     description: 'Captures the melody in your speech',
   },
+  {
+    type: 'memo',
+    name: 'Memo',
+    icon: '🎤',
+    color: '#f43f5e',
+    soundfont: '',
+    category: 'keys',
+    octaveRange: [0, 0],
+    description: 'Spela in röst/sång som ljudmemo',
+  },
 ]
 
 export const INSTRUMENT_MAP = new Map<InstrumentType, InstrumentConfig>(

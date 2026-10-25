@@ -221,6 +221,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const metronomeEnabledRef = useRef<boolean>(false)
   const metronomeAudibleRef = useRef<boolean>(false)
   const isInitializedRef = useRef<boolean>(false)
+  
+  // Memo recording (raw audio)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const memoAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
 
   const initializeAudio = useCallback(async () => {
     if (isInitializedRef.current) {
@@ -630,6 +635,26 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     setState((prev) => ({ ...prev, isRecording: true }))
     setLoopProgress(0)
 
+    // MEMO MODE: Start MediaRecorder for raw audio capture
+    if (currentInstrument === 'memo' && mediaStreamRef.current) {
+      audioChunksRef.current = []
+      try {
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+        mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, { mimeType })
+        
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data)
+          }
+        }
+        
+        mediaRecorderRef.current.start(100) // Collect data every 100ms
+        console.log('Memo recording started')
+      } catch (e) {
+        console.error('Failed to start memo recording:', e)
+      }
+    }
+
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
 
@@ -650,6 +675,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
           }, 0)
           return
         }
+      }
+
+      // MEMO MODE: Just track time, no pitch detection
+      if (currentInstrument === 'memo') {
+        if (isRecordingRef.current) {
+          animationFrameRef.current = requestAnimationFrame(analyzeLoop)
+        }
+        return
       }
 
       // Only do pitch detection if mic is enabled and not drums
@@ -706,6 +739,56 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       cancelAnimationFrame(animationFrameRef.current)
     }
 
+    let recordingDuration = Tone.now() - recordingStartTimeRef.current
+
+    // MEMO MODE: Handle audio recording
+    if (currentInstrument === 'memo' && mediaRecorderRef.current) {
+      const recorder = mediaRecorderRef.current
+      
+      // Stop the recorder and wait for final data
+      recorder.stop()
+      
+      // Create the loop asynchronously when all data is collected
+      const loopId = crypto.randomUUID()
+      const config = getInstrumentConfig('memo')
+      
+      // Handle the recorded data
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        console.log('Memo recording complete:', audioBlob.size, 'bytes')
+        
+        // Determine duration
+        const finalDuration = masterLoopDurationRef.current || recordingDuration
+        if (!masterLoopDurationRef.current) {
+          masterLoopDurationRef.current = recordingDuration
+          setMasterLoopDuration(recordingDuration)
+        }
+        
+        const memoLoop: RecordedLoop = {
+          id: loopId,
+          instrumentType: 'memo',
+          notes: [], // Memos don't have MIDI notes
+          duration: finalDuration,
+          color: config.color,
+          volume: 1,
+          audioBlob,
+          audioUrl,
+        }
+        
+        // Create audio element for playback
+        const audio = new Audio(audioUrl)
+        audio.loop = true
+        memoAudioElementsRef.current.set(loopId, audio)
+        
+        setLoops((prev) => [...prev, memoLoop])
+      }
+      
+      mediaRecorderRef.current = null
+      return null // Loop will be added asynchronously
+    }
+
     if (lastNoteRef.current) {
       const currentTime = Tone.now() - recordingStartTimeRef.current
       const duration = currentTime - lastNoteRef.current.startTime
@@ -716,8 +799,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         duration: Math.max(duration, 0.1),
       })
     }
-
-    let recordingDuration = Tone.now() - recordingStartTimeRef.current
 
     if (recordingNotesRef.current.length === 0) {
       return null
@@ -738,8 +819,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     // AUTO AI ENHANCEMENT - clean up notes automatically
     let cleanedNotes = [...recordingNotesRef.current]
     
-    // Skip AI for drums - they don't need melodic cleanup
-    if (currentInstrument !== 'drums') {
+    // Skip AI for drums and memos - they don't need melodic cleanup
+    if (currentInstrument !== 'drums' && currentInstrument !== 'memo') {
       // 1. Remove very short notes (noise)
       cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.08)
       
@@ -876,8 +957,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number; volume: number; loopId: string }> = []
 
-    // Collect all events from all loops
+    // Collect all events from all loops (skip memo loops - they use audio playback)
     loops.forEach((loop) => {
+      // Skip memo loops - they're handled separately
+      if (loop.instrumentType === 'memo') return
+      
       console.log(`Processing loop ${loop.id} (${loop.instrumentType}): ${loop.notes.length} notes, volume: ${loop.volume}`)
       if (loop.notes.length > 0 && (loop.volume ?? 1) > 0) {
         loop.notes.forEach((note) => {
@@ -899,10 +983,29 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     // Sort events by time for proper scheduling
     allEvents.sort((a, b) => a.time - b.time)
     
-    console.log(`Total events to play: ${allEvents.length}`)
+    const maxDuration = Math.max(...loops.map((l) => l.duration), 4)
+    console.log(`Loop duration: ${maxDuration}s, MIDI events: ${allEvents.length}`)
 
+    // Start memo audio loops
+    loops.forEach((loop) => {
+      if (loop.instrumentType === 'memo' && loop.audioUrl) {
+        let audio = memoAudioElementsRef.current.get(loop.id)
+        if (!audio) {
+          audio = new Audio(loop.audioUrl)
+          audio.loop = true
+          memoAudioElementsRef.current.set(loop.id, audio)
+        }
+        audio.volume = loop.volume ?? 1
+        audio.currentTime = 0
+        audio.play().catch(e => console.warn('Failed to play memo:', e))
+      }
+    })
+
+    // If we only have memo loops, we still need to track state
     if (allEvents.length === 0) {
-      console.log('No events to play')
+      console.log('No MIDI events - memo-only playback')
+      transport.start()
+      setState((prev) => ({ ...prev, isPlaying: true }))
       return
     }
 
@@ -927,7 +1030,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       }
     }, allEvents.map((e) => [e.time, e]))
 
-    const maxDuration = Math.max(...loops.map((l) => l.duration), 4)
     console.log(`Loop duration: ${maxDuration}s`)
     
     loopPartRef.current.loop = true
@@ -944,6 +1046,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     
     // Release all held notes
     releaseAllNotes()
+    
+    // Stop all memo audio elements
+    memoAudioElementsRef.current.forEach((audio) => {
+      audio.pause()
+      audio.currentTime = 0
+    })
     
     if (loopPartRef.current) {
       loopPartRef.current.stop()
@@ -966,6 +1074,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [state.isPlaying, startPlayback, stopPlayback])
 
   const deleteLoop = useCallback((loopId: string) => {
+    // Clean up memo audio element if exists
+    const audio = memoAudioElementsRef.current.get(loopId)
+    if (audio) {
+      audio.pause()
+      URL.revokeObjectURL(audio.src)
+      memoAudioElementsRef.current.delete(loopId)
+    }
+    
     setLoops((prev) => prev.filter((loop) => loop.id !== loopId))
   }, [])
 
@@ -996,6 +1112,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const clearAllLoops = useCallback(() => {
     stopPlayback()
+    
+    // Clean up all memo audio elements
+    memoAudioElementsRef.current.forEach((audio) => {
+      audio.pause()
+      URL.revokeObjectURL(audio.src)
+    })
+    memoAudioElementsRef.current.clear()
+    
     setLoops([])
     // Reset master loop duration so next recording starts fresh
     masterLoopDurationRef.current = null
@@ -1013,7 +1137,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const cycleInstrument = useCallback((direction: 'next' | 'prev') => {
-    const instruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
+    const instruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice', 'memo']
     const currentIndex = instruments.indexOf(currentInstrument)
     let newIndex: number
 

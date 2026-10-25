@@ -23,6 +23,9 @@ export interface RecordedLoop {
   duration: number
   color: string
   volume: number
+  // For memo recordings (raw audio)
+  audioBlob?: Blob
+  audioUrl?: string
 }
 
 export interface AudioEngineConfig {

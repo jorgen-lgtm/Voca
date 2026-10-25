@@ -1,4 +1,4 @@
-export type InstrumentType = 'drums' | 'bass' | 'piano' | 'guitar' | 'synth' | 'strings' | 'brass' | 'organ' | 'voice'
+export type InstrumentType = 'drums' | 'bass' | 'piano' | 'guitar' | 'synth' | 'strings' | 'brass' | 'organ' | 'voice' | 'memo'
 
 export interface MidiNote {
   pitch: number

@@ -106,7 +106,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen p-4">
       {/* Header */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
+      <div className="absolute top-4 left-4 right-20 flex justify-between items-center z-10">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -121,9 +121,6 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           >
             Help
           </Link>
-        </motion.div>
-
-        <div className="flex items-center gap-2">
           {/* Mic Toggle */}
           <motion.button
             initial={{ opacity: 0, scale: 0.8 }}
@@ -147,7 +144,9 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               </svg>
             )}
           </motion.button>
+        </motion.div>
 
+        <div className="flex items-center gap-2">
           {loops.length > 0 && (
             <>
               <motion.button

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import { RecordButton } from './RecordButton'
 import { LoopRing } from './LoopRing'
 import { LoopEditor } from './LoopEditor'
@@ -55,6 +56,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     recordDrumHit,
     recordKeyboardNote,
     triggerNote,
+    toggleMic,
+    micEnabled,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const selectedLoop = loops.find(l => l.id === selectedLoopId)
@@ -103,12 +106,44 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"
+          className="flex items-center gap-3"
         >
-          HumWeave
+          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            HumWeave
+          </span>
+          <Link
+            href="/help"
+            className="text-xs px-2 py-1 bg-gray-800/60 rounded-full text-gray-400 hover:text-white hover:bg-gray-700/60 transition-colors"
+          >
+            Help
+          </Link>
         </motion.div>
 
         <div className="flex items-center gap-2">
+          {/* Mic Toggle */}
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={toggleMic}
+            className={`p-2 rounded-full transition-colors ${
+              micEnabled 
+                ? 'bg-green-600/80 text-white' 
+                : 'bg-gray-800/80 text-gray-400'
+            }`}
+            title={micEnabled ? 'Microphone ON' : 'Microphone OFF'}
+          >
+            {micEnabled ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            )}
+          </motion.button>
+
           {loops.length > 0 && (
             <>
               <motion.button

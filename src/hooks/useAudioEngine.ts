@@ -312,16 +312,16 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
       analyserRef.current = audioContextRef.current.createAnalyser()
-      analyserRef.current.fftSize = 2048
-      analyserRef.current.smoothingTimeConstant = 0.1
+      analyserRef.current.fftSize = 4096  // Larger buffer for better pitch detection
+      analyserRef.current.smoothingTimeConstant = 0.2  // Slight smoothing for stability
       source.connect(analyserRef.current)
       
-      // Initialize pitch detector with settings optimized for humming
+      // Initialize pitch detector optimized for singing voices
       const sampleRate = audioContextRef.current.sampleRate
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
-        threshold: 0.1,        // Lower = more sensitive to pitch
-        probabilityThreshold: 0.05  // Lower = accept less certain pitches
+        threshold: 0.15,        // Balanced sensitivity
+        probabilityThreshold: 0.1  // Accept reasonably certain pitches
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
@@ -522,54 +522,61 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return null
     }
 
-    // NON-VOICE MODE: Standard pitch detection
-    const minFreq = 50
-    const maxFreq = 800
+    // NON-VOICE MODE: Standard pitch detection for singing/humming
+    const minFreq = 80   // Lowest reasonable singing note
+    const maxFreq = 1000 // Highest reasonable singing note
     
     if (frequency && frequency > minFreq && frequency < maxFreq) {
-      const midiNote = frequencyToMidi(frequency)
+      let midiNote = frequencyToMidi(frequency)
       
-      const pitchTolerance = 2
+      // Snap to nearest note in pentatonic scale for more musical results
+      midiNote = snapToScale(midiNote)
+      
+      const pitchTolerance = 2 // semitones
       const lastPitch = lastDetectedPitchRef.current
-      const isStable = lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance
       
-      if (isStable || lastDetectedPitchRef.current === midiNote) {
+      // Check if pitch is stable (within tolerance of last pitch)
+      if (lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance) {
         pitchStabilityCountRef.current++
+        // Keep the last pitch if we're within tolerance (reduces jitter)
+        midiNote = lastPitch
+      } else if (lastPitch !== null && Math.abs(midiNote - lastPitch) > 5) {
+        // Big jump - might be an octave error, check for octave relationship
+        const octaveDiff = Math.abs(midiNote - lastPitch)
+        if (octaveDiff === 12 || octaveDiff === 24) {
+          // Likely octave jump error - dampen it
+          midiNote = lastPitch
+          pitchStabilityCountRef.current++
+        } else {
+          // Genuine note change
+          pitchStabilityCountRef.current = 1
+        }
       } else {
         pitchStabilityCountRef.current = 1
       }
       
       lastDetectedPitchRef.current = midiNote
 
-      if (pitchStabilityCountRef.current >= 1) {
-        const noteName = midiToNoteName(midiNote)
-        const clarity = Math.min(rms * 30, 1)
+      // Always return a result for responsive feedback
+      const noteName = midiToNoteName(midiNote)
+      const clarity = Math.min(rms * 30, 1)
 
-        const result: PitchDetectionResult = {
-          frequency,
-          clarity,
-          midiNote,
-          noteName,
-        }
-
-        setCurrentPitch(result)
-        return result
-      } else {
-        setCurrentPitch({
-          frequency,
-          clarity: Math.min(rms * 30, 1),
-          midiNote: null,
-          noteName: null,
-        })
-        return null
+      const result: PitchDetectionResult = {
+        frequency,
+        clarity,
+        midiNote,
+        noteName,
       }
+
+      setCurrentPitch(result)
+      return result
     }
 
     lastDetectedPitchRef.current = null
     pitchStabilityCountRef.current = 0
     setCurrentPitch(null)
     return null
-  }, [currentInstrument, getNextScaleNote])
+  }, [currentInstrument, getNextScaleNote, snapToScale])
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)

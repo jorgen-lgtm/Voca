@@ -169,11 +169,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   })
 
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
+  const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('synth')
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const drumAnalyserRef = useRef<AnalyserNode | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
@@ -229,6 +231,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       console.log('AudioContext state:', audioContextRef.current.state)
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
+      // Filtered path for pitch detection (voice)
       highPassFilterRef.current = audioContextRef.current.createBiquadFilter()
       highPassFilterRef.current.type = 'highpass'
       highPassFilterRef.current.frequency.value = 100
@@ -246,6 +249,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       source.connect(highPassFilterRef.current)
       highPassFilterRef.current.connect(lowPassFilterRef.current)
       lowPassFilterRef.current.connect(analyserRef.current)
+      
+      // Unfiltered path for drum detection (full frequency range)
+      drumAnalyserRef.current = audioContextRef.current.createAnalyser()
+      drumAnalyserRef.current.fftSize = 4096
+      drumAnalyserRef.current.smoothingTimeConstant = 0.3
+      source.connect(drumAnalyserRef.current)
+      
+      console.log('Audio analysers initialized: pitch + drums')
 
       await tf.ready()
       console.log('TensorFlow.js ready:', tf.getBackend())
@@ -366,13 +377,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [currentInstrument])
 
   const detectDrumHit = useCallback((): { hit: boolean; drumType: 'kick' | 'snare' | 'hihat' | null } => {
-    if (!analyserRef.current || !audioContextRef.current) {
+    if (!drumAnalyserRef.current || !audioContextRef.current) {
       return { hit: false, drumType: null }
     }
 
-    const bufferLength = analyserRef.current.fftSize
+    const bufferLength = drumAnalyserRef.current.fftSize
     const buffer = new Float32Array(bufferLength)
-    analyserRef.current.getFloatTimeDomainData(buffer)
+    drumAnalyserRef.current.getFloatTimeDomainData(buffer)
 
     let rms = 0
     for (let i = 0; i < buffer.length; i++) {
@@ -385,37 +396,37 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const currentTime = Tone.now()
     const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
-    const minTimeBetweenHits = 0.06
+    const minTimeBetweenHits = 0.08
 
     if (timeSinceLastHit < minTimeBetweenHits) {
       return { hit: false, drumType: null }
     }
 
-    const volumeThreshold = 0.04
-    const spikeRatio = 1.8
+    const volumeThreshold = 0.03
+    const spikeRatio = 1.5
 
     if (rms > volumeThreshold && rms > prevRms * spikeRatio) {
       lastDrumHitTimeRef.current = currentTime
 
-      const freqData = new Uint8Array(analyserRef.current.frequencyBinCount)
-      analyserRef.current.getByteFrequencyData(freqData)
+      const freqData = new Uint8Array(drumAnalyserRef.current.frequencyBinCount)
+      drumAnalyserRef.current.getByteFrequencyData(freqData)
 
       const sampleRate = audioContextRef.current.sampleRate
-      const binSize = sampleRate / analyserRef.current.fftSize
+      const binSize = sampleRate / drumAnalyserRef.current.fftSize
 
-      let lowEnergy = 0
-      let midEnergy = 0
-      let highEnergy = 0
+      let lowEnergy = 0    // 20-250 Hz (kick)
+      let midEnergy = 0    // 250-4000 Hz (snare)
+      let highEnergy = 0   // 4000-12000 Hz (hihat/cymbal)
 
       for (let i = 0; i < freqData.length; i++) {
         const freq = i * binSize
-        const energy = freqData[i]
+        const energy = freqData[i] * freqData[i] // Square for emphasis
 
-        if (freq < 300) {
+        if (freq >= 20 && freq < 250) {
           lowEnergy += energy
-        } else if (freq < 2000) {
+        } else if (freq >= 250 && freq < 4000) {
           midEnergy += energy
-        } else if (freq < 8000) {
+        } else if (freq >= 4000 && freq < 12000) {
           highEnergy += energy
         }
       }
@@ -426,17 +437,22 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       }
 
       const lowRatio = lowEnergy / total
+      const midRatio = midEnergy / total
       const highRatio = highEnergy / total
 
+      console.log(`Drum freq analysis - Low: ${(lowRatio*100).toFixed(1)}%, Mid: ${(midRatio*100).toFixed(1)}%, High: ${(highRatio*100).toFixed(1)}%`)
+
       let drumType: 'kick' | 'snare' | 'hihat'
-      if (lowRatio > 0.5) {
+      
+      if (lowRatio > 0.4) {
         drumType = 'kick'
-      } else if (highRatio > 0.35) {
+      } else if (highRatio > 0.25) {
         drumType = 'hihat'
       } else {
         drumType = 'snare'
       }
 
+      console.log(`Detected: ${drumType}`)
       return { hit: true, drumType }
     }
 
@@ -487,6 +503,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
           
           const drumMidiMap = { kick: 36, snare: 38, hihat: 42 }
           const midiNote = drumMidiMap[drumType]
+          
+          setLastDrumType(drumType)
+          setTimeout(() => setLastDrumType(null), 300)
           
           recordingNotesRef.current.push({
             pitch: midiNote,
@@ -827,6 +846,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   return {
     state,
     currentPitch,
+    lastDrumType,
     loops,
     currentInstrument,
     initializeAudio,

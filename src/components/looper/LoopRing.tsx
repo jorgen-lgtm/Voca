@@ -147,12 +147,13 @@ export function LoopRing({
       </svg>
 
       <motion.div
-        className="absolute flex items-center justify-center text-lg cursor-pointer"
+        className="absolute flex items-center justify-center text-lg cursor-pointer select-none"
         style={{
           left: baseRadius + strokeWidth - 12,
           top: -8,
-          width: 24,
-          height: 24,
+          width: 32,
+          height: 32,
+          zIndex: 100,
         }}
         animate={{
           scale: isPlaying ? [1, 1.2, 1] : 1,
@@ -161,10 +162,21 @@ export function LoopRing({
           duration: 0.5,
           repeat: isPlaying ? Infinity : 0,
         }}
+        onPointerDown={(e) => {
+          e.stopPropagation()
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation()
+        }}
         onClick={(e) => {
           e.stopPropagation()
+          e.preventDefault()
           setShowVolume(!showVolume)
         }}
+        onTap={() => {
+          setShowVolume(!showVolume)
+        }}
+        whileTap={{ scale: 0.9 }}
         title="Klicka för volymkontroll"
       >
         {INSTRUMENT_ICONS[loop.instrumentType]}
@@ -175,52 +187,57 @@ export function LoopRing({
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
-          className="absolute z-50 bg-gray-800/95 backdrop-blur-sm rounded-xl p-3 shadow-xl border border-gray-600/50"
+          className="fixed z-[1000] bg-gray-800/95 backdrop-blur-sm rounded-xl p-4 shadow-2xl border border-purple-500/50"
           style={{
-            left: baseRadius + strokeWidth + 20,
-            top: baseRadius + strokeWidth - 40,
-            minWidth: 120,
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            minWidth: 200,
           }}
           onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm">{INSTRUMENT_ICONS[loop.instrumentType]}</span>
-            <span className="text-xs text-gray-300">{Math.round((loop.volume || 1) * 100)}%</span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{INSTRUMENT_ICONS[loop.instrumentType]}</span>
+              <span className="text-lg font-bold text-white">{Math.round((loop.volume ?? 1) * 100)}%</span>
+            </div>
+            <button
+              onClick={() => setShowVolume(false)}
+              className="p-2 text-gray-400 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
           </div>
           
           <input
             type="range"
             min="0"
             max="100"
-            value={(loop.volume || 1) * 100}
+            value={(loop.volume ?? 1) * 100}
             onChange={(e) => onVolumeChange?.(parseInt(e.target.value) / 100)}
-            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500 touch-none"
+            style={{ WebkitAppearance: 'none' }}
           />
           
-          <div className="flex justify-between mt-2 gap-1">
+          <div className="flex justify-between mt-4 gap-2">
             <button
               onClick={() => onVolumeChange?.(0)}
-              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
             >
-              🔇
+              🔇 Mute
             </button>
             <button
               onClick={() => onVolumeChange?.(0.5)}
-              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
             >
               50%
             </button>
             <button
               onClick={() => onVolumeChange?.(1)}
-              className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
             >
               100%
-            </button>
-            <button
-              onClick={() => setShowVolume(false)}
-              className="px-2 py-1 text-xs bg-red-600/50 hover:bg-red-600 rounded transition-colors"
-            >
-              ✕
             </button>
           </div>
         </motion.div>

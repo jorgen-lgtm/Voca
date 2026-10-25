@@ -6,10 +6,63 @@ import type { PitchDetectionResult } from '@/types/audio'
 interface PitchDisplayProps {
   pitch: PitchDetectionResult | null
   isRecording: boolean
+  isDrumMode?: boolean
+  lastDrumType?: 'kick' | 'snare' | 'hihat' | null
 }
 
-export function PitchDisplay({ pitch, isRecording }: PitchDisplayProps) {
+const DRUM_INFO = {
+  kick: { emoji: '🦶', name: 'KICK', color: 'from-red-500 to-orange-500', hint: 'Säg "BUM"' },
+  snare: { emoji: '👏', name: 'SNARE', color: 'from-yellow-500 to-amber-500', hint: 'Säg "TSH"' },
+  hihat: { emoji: '🔔', name: 'HI-HAT', color: 'from-cyan-500 to-blue-500', hint: 'Säg "TSS"' },
+}
+
+export function PitchDisplay({ pitch, isRecording, isDrumMode, lastDrumType }: PitchDisplayProps) {
   if (!isRecording) return null
+
+  if (isDrumMode) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="absolute top-20 left-0 right-0 flex justify-center"
+      >
+        <div className="flex flex-col items-center gap-3 px-6 py-4 rounded-2xl bg-gray-800/80 backdrop-blur-sm border border-gray-700/50">
+          <div className="flex items-center gap-6">
+            {(['kick', 'snare', 'hihat'] as const).map((drum) => {
+              const info = DRUM_INFO[drum]
+              const isActive = lastDrumType === drum
+              return (
+                <motion.div
+                  key={drum}
+                  className={`flex flex-col items-center p-3 rounded-xl transition-all ${
+                    isActive 
+                      ? `bg-gradient-to-br ${info.color} shadow-lg` 
+                      : 'bg-gray-700/50'
+                  }`}
+                  animate={{
+                    scale: isActive ? 1.2 : 1,
+                  }}
+                  transition={{ duration: 0.1 }}
+                >
+                  <span className="text-2xl">{info.emoji}</span>
+                  <span className={`text-xs font-bold mt-1 ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                    {info.name}
+                  </span>
+                </motion.div>
+              )
+            })}
+          </div>
+          
+          <div className="flex gap-4 text-xs text-gray-500">
+            <span>🦶 Lågt ljud</span>
+            <span>👏 Klapp</span>
+            <span>🔔 Väsljud</span>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div

@@ -30,6 +30,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
   const {
     state,
     currentPitch,
+    lastDrumType,
     loops,
     currentInstrument,
     initializeAudio,
@@ -117,7 +118,12 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         </div>
       </div>
 
-      <PitchDisplay pitch={currentPitch} isRecording={state.isRecording} />
+      <PitchDisplay 
+        pitch={currentPitch} 
+        isRecording={state.isRecording} 
+        isDrumMode={currentInstrument === 'drums'}
+        lastDrumType={lastDrumType}
+      />
 
       <AnimatePresence>
         {showAIPanel && loops.length > 0 && (

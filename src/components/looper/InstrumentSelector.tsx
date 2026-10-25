@@ -137,7 +137,7 @@ export function InstrumentSelector({
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden w-full max-w-md"
           >
-            <div className="grid grid-cols-4 gap-2 p-4 bg-gray-800/80 rounded-2xl border border-gray-700/50 mt-2">
+            <div className="grid grid-cols-3 gap-2 p-4 bg-gray-800/80 rounded-2xl border border-gray-700/50 mt-2">
               {INSTRUMENTS.map((instrument) => {
                 const isActive = instrument.type === currentInstrument
                 const loading = loadingInstruments.has(instrument.type)

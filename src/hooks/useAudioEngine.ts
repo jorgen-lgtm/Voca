@@ -469,6 +469,23 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     triggerDrumHit(drumType)
   }, [triggerDrumHit])
 
+  const recordKeyboardNote = useCallback((midiNote: number, duration: number = 0.3) => {
+    // Play the note
+    triggerNote(midiNote, duration)
+    
+    // Record if recording
+    if (!isRecordingRef.current) return
+    
+    const currentTime = Tone.now() - recordingStartTimeRef.current
+    
+    recordingNotesRef.current.push({
+      pitch: midiNote,
+      velocity: 100,
+      startTime: currentTime,
+      duration: duration,
+    })
+  }, [triggerNote])
+
   const startRecording = useCallback(async () => {
     if (!state.isInitialized) {
       const success = await initializeAudio()
@@ -892,6 +909,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     triggerNote,
     triggerDrumHit,
     recordDrumHit,
+    recordKeyboardNote,
     toggleMetronome,
     toggleMetronomeAudio,
     setLoopVolume,

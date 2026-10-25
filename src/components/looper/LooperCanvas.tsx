@@ -9,6 +9,7 @@ import { InstrumentSelector } from './InstrumentSelector'
 import { TransportControls } from './TransportControls'
 import { PitchDisplay } from './PitchDisplay'
 import { DrumPads } from './DrumPads'
+import { MiniKeyboard } from './MiniKeyboard'
 import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
@@ -52,6 +53,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     transposeLoop,
     updateLoops,
     recordDrumHit,
+    recordKeyboardNote,
+    triggerNote,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const selectedLoop = loops.find(l => l.id === selectedLoopId)
@@ -274,6 +277,18 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             isRecording={state.isRecording}
             lastDrumType={lastDrumType}
             onDrumHit={recordDrumHit}
+          />
+        </div>
+      )}
+
+      {/* Mini Keyboard for melodic instruments */}
+      {currentInstrument !== 'drums' && !selectedLoop && (
+        <div className="mb-6">
+          <MiniKeyboard
+            isRecording={state.isRecording}
+            onNotePlay={(note) => triggerNote(note, 0.3)}
+            onNoteRecord={(note) => recordKeyboardNote(note, 0.3)}
+            baseOctave={currentInstrument === 'bass' ? 2 : 4}
           />
         </div>
       )}

@@ -69,23 +69,39 @@ export function MiniKeyboard({
     <div className="flex flex-col items-center gap-2">
       {/* Octave controls */}
       <div className="flex items-center gap-3 text-sm">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setOctave(o => Math.max(2, o - 1))}
-          className="px-3 py-1 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-          disabled={octave <= 2}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (octave > 2) setOctave(octave - 1)
+          }}
+          className={`px-4 py-2 rounded-lg transition-colors font-medium ${
+            octave <= 2 
+              ? 'bg-gray-800 text-gray-600 cursor-not-allowed' 
+              : 'bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-500'
+          }`}
         >
-          ◀ Oktav
-        </motion.button>
-        <span className="text-gray-400 font-mono w-8 text-center">C{octave}</span>
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setOctave(o => Math.min(6, o + 1))}
-          className="px-3 py-1 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-          disabled={octave >= 6}
+          ◀ Oktav ner
+        </button>
+        <div className="px-4 py-2 bg-gray-800 rounded-lg">
+          <span className="text-purple-400 font-bold">C{octave}</span>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (octave < 6) setOctave(octave + 1)
+          }}
+          className={`px-4 py-2 rounded-lg transition-colors font-medium ${
+            octave >= 6 
+              ? 'bg-gray-800 text-gray-600 cursor-not-allowed' 
+              : 'bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-500'
+          }`}
         >
-          Oktav ▶
-        </motion.button>
+          Oktav upp ▶
+        </button>
       </div>
 
       {/* Keyboard */}

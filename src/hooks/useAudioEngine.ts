@@ -91,6 +91,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
+  const pitchHistoryRef = useRef<number[]>([])
+  const stablePitchCountRef = useRef<number>(0)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
 
@@ -100,22 +102,24 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: 44100,
         },
       })
       mediaStreamRef.current = stream
 
-      audioContextRef.current = new AudioContext()
+      audioContextRef.current = new AudioContext({ sampleRate: 44100 })
       const source = audioContextRef.current.createMediaStreamSource(stream)
       analyserRef.current = audioContextRef.current.createAnalyser()
-      analyserRef.current.fftSize = 2048
+      analyserRef.current.fftSize = 4096
+      analyserRef.current.smoothingTimeConstant = 0.8
       source.connect(analyserRef.current)
 
       pitchDetectorRef.current = PitchFinder.YIN({
         sampleRate: audioContextRef.current.sampleRate,
-        threshold: 0.1,
+        threshold: 0.15,
       })
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
@@ -142,29 +146,55 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
 
+    let rms = 0
+    for (let i = 0; i < buffer.length; i++) {
+      rms += buffer[i] * buffer[i]
+    }
+    rms = Math.sqrt(rms / buffer.length)
+
+    const minVolume = 0.015
+    if (rms < minVolume) {
+      pitchHistoryRef.current = []
+      stablePitchCountRef.current = 0
+      setCurrentPitch(null)
+      return null
+    }
+
     const frequency = pitchDetectorRef.current(buffer)
 
-    if (frequency && frequency > 60 && frequency < 2000) {
+    if (frequency && frequency > 80 && frequency < 1200) {
       const midiNote = frequencyToMidi(frequency)
-      const noteName = midiToNoteName(midiNote)
-
-      let clarity = 0
-      for (let i = 0; i < buffer.length; i++) {
-        clarity += buffer[i] * buffer[i]
+      
+      pitchHistoryRef.current.push(midiNote)
+      if (pitchHistoryRef.current.length > 5) {
+        pitchHistoryRef.current.shift()
       }
-      clarity = Math.sqrt(clarity / buffer.length)
+
+      const allSame = pitchHistoryRef.current.length >= 3 && 
+        pitchHistoryRef.current.slice(-3).every(n => n === midiNote)
+
+      if (allSame) {
+        stablePitchCountRef.current++
+      } else {
+        stablePitchCountRef.current = 0
+      }
+
+      const noteName = midiToNoteName(midiNote)
+      const clarity = Math.min(rms * 10, 1)
 
       const result: PitchDetectionResult = {
         frequency,
         clarity,
-        midiNote,
-        noteName,
+        midiNote: stablePitchCountRef.current >= 2 ? midiNote : null,
+        noteName: stablePitchCountRef.current >= 2 ? noteName : null,
       }
 
       setCurrentPitch(result)
-      return result
+      return stablePitchCountRef.current >= 2 ? result : null
     }
 
+    pitchHistoryRef.current = []
+    stablePitchCountRef.current = 0
     setCurrentPitch(null)
     return null
   }, [])
@@ -194,7 +224,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.01) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.05) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

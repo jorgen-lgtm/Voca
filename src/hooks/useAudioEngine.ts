@@ -777,14 +777,23 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const transport = Tone.getTransport()
     
+    // Stop and dispose previous part
     if (loopPartRef.current) {
+      loopPartRef.current.stop()
       loopPartRef.current.dispose()
+      loopPartRef.current = null
     }
+    
+    // Reset transport
+    transport.stop()
+    transport.position = 0
 
-    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number; volume: number }> = []
+    const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number; volume: number; loopId: string }> = []
 
+    // Collect all events from all loops
     loops.forEach((loop) => {
-      if (loop.notes.length > 0) {
+      console.log(`Processing loop ${loop.id} (${loop.instrumentType}): ${loop.notes.length} notes, volume: ${loop.volume}`)
+      if (loop.notes.length > 0 && (loop.volume ?? 1) > 0) {
         loop.notes.forEach((note) => {
           allEvents.push({
             time: note.startTime,
@@ -792,21 +801,24 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             duration: note.duration,
             instrument: loop.instrumentType,
             midiNote: note.pitch,
-            volume: loop.volume,
+            volume: loop.volume ?? 1,
+            loopId: loop.id,
           })
         })
       }
     })
 
-    const partEvents = allEvents.map((e) => ({
-      time: e.time,
-      note: e.note,
-      duration: e.duration,
-      instrument: e.instrument,
-      midiNote: e.midiNote,
-      volume: e.volume,
-    }))
+    // Sort events by time for proper scheduling
+    allEvents.sort((a, b) => a.time - b.time)
+    
+    console.log(`Total events to play: ${allEvents.length}`)
 
+    if (allEvents.length === 0) {
+      console.log('No events to play')
+      return
+    }
+
+    // Create Part with all events
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
       const velocity = event.volume ?? 1
@@ -825,9 +837,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
           }
         }
       }
-    }, partEvents.map((e) => [e.time, e]))
+    }, allEvents.map((e) => [e.time, e]))
 
     const maxDuration = Math.max(...loops.map((l) => l.duration), 4)
+    console.log(`Loop duration: ${maxDuration}s`)
+    
     loopPartRef.current.loop = true
     loopPartRef.current.loopEnd = maxDuration
 
@@ -839,12 +853,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const stopPlayback = useCallback(() => {
     const transport = Tone.getTransport()
-    transport.stop()
-    transport.position = 0
-
+    
     if (loopPartRef.current) {
       loopPartRef.current.stop()
+      loopPartRef.current.dispose()
+      loopPartRef.current = null
     }
+    
+    transport.stop()
+    transport.position = 0
 
     setState((prev) => ({ ...prev, isPlaying: false }))
   }, [])

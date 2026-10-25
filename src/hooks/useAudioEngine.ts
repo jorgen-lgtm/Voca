@@ -244,7 +244,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Check for microphone support first
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia not supported')
-        alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Safari.')
+        alert('Your browser does not support microphone access. Try Chrome or Safari.')
         return false
       }
 
@@ -345,11 +345,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          alert('Mikrofon-åtkomst nekad. Tillåt mikrofon i webbläsarens inställningar och ladda om sidan.')
+          alert('Microphone access denied. Allow microphone in browser settings and reload the page.')
         } else if (error.name === 'NotFoundError') {
-          alert('Ingen mikrofon hittades. Anslut en mikrofon och ladda om sidan.')
+          alert('No microphone found. Connect a microphone and reload the page.')
         } else {
-          alert(`Kunde inte starta ljud: ${error.message}`)
+          alert(`Could not start audio: ${error.message}`)
         }
       }
       

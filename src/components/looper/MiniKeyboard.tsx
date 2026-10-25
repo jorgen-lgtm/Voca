@@ -157,7 +157,7 @@ export function MiniKeyboard({
               : 'bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-500'
           }`}
         >
-          ◀ Oktav ner
+          ◀ Octave
         </button>
         <div className="px-4 py-2 bg-gray-800 rounded-lg">
           <span className="text-purple-400 font-bold">C{octave}</span>
@@ -175,7 +175,7 @@ export function MiniKeyboard({
               : 'bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-500'
           }`}
         >
-          Oktav upp ▶
+          Octave ▶
         </button>
       </div>
 
@@ -275,7 +275,7 @@ export function MiniKeyboard({
         <span className="text-gray-400">Tangentbord:</span>{' '}
         <span className="font-mono bg-gray-800 px-1 rounded">A-K</span> vita,{' '}
         <span className="font-mono bg-gray-800 px-1 rounded">W E T Y U</span> svarta,{' '}
-        <span className="font-mono bg-gray-800 px-1 rounded">Z/X</span> oktav
+        <span className="font-mono bg-gray-800 px-1 rounded">Z/X</span> octave
       </div>
 
       {/* Recording indicator */}
@@ -286,7 +286,7 @@ export function MiniKeyboard({
           className="text-xs text-red-400 flex items-center gap-1"
         >
           <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          Spelar in - tryck på tangenterna!
+          Recording - tap the keys!
         </motion.div>
       )}
     </div>

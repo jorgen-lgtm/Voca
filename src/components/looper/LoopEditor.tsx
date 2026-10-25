@@ -36,7 +36,7 @@ export function LoopEditor({
           <span className="text-2xl">{getInstrumentConfig(loop.instrumentType).icon}</span>
           <div>
             <div className="font-medium text-white">{getInstrumentConfig(loop.instrumentType).name}</div>
-            <div className="text-xs text-gray-400">{loop.notes.length} noter</div>
+            <div className="text-xs text-gray-400">{loop.notes.length} notes</div>
           </div>
         </div>
         <button
@@ -49,14 +49,14 @@ export function LoopEditor({
 
       {!canEdit && (
         <div className="mb-4 p-3 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm text-center">
-          ⏸️ Stoppa uppspelningen för att redigera
+          ⏸️ Stop playback to edit
         </div>
       )}
 
       {/* Volume */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-400">Volym</span>
+          <span className="text-sm text-gray-400">Volume</span>
           <span className="text-sm font-medium text-white">{Math.round((loop.volume ?? 1) * 100)}%</span>
         </div>
         <input
@@ -96,21 +96,21 @@ export function LoopEditor({
       {/* Transpose (not for drums) */}
       {loop.instrumentType !== 'drums' && (
         <div className="mb-4">
-          <div className="text-sm text-gray-400 mb-2">Transponera</div>
+          <div className="text-sm text-gray-400 mb-2">Transpose</div>
           <div className="flex gap-2">
             <button
               onClick={() => onTranspose(-12)}
               disabled={!canEdit}
               className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-              title="-1 oktav"
+              title="-1 octave"
             >
-              ⬇️ Oktav
+              ⬇️ Oct
             </button>
             <button
               onClick={() => onTranspose(-1)}
               disabled={!canEdit}
               className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-              title="-1 halvton"
+              title="-1 semitone"
             >
               -1
             </button>
@@ -118,7 +118,7 @@ export function LoopEditor({
               onClick={() => onTranspose(1)}
               disabled={!canEdit}
               className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-              title="+1 halvton"
+              title="+1 semitone"
             >
               +1
             </button>
@@ -126,9 +126,9 @@ export function LoopEditor({
               onClick={() => onTranspose(12)}
               disabled={!canEdit}
               className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
-              title="+1 oktav"
+              title="+1 octave"
             >
-              ⬆️ Oktav
+              ⬆️ Oct
             </button>
           </div>
         </div>
@@ -140,7 +140,7 @@ export function LoopEditor({
         disabled={!canEdit}
         className="w-full py-2.5 text-sm bg-red-600/80 hover:bg-red-600 rounded-lg transition-colors text-white disabled:opacity-50"
       >
-        🗑️ Ta bort spår
+        🗑️ Delete track
       </button>
     </motion.div>
   )

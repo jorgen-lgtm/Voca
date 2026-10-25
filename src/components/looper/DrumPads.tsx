@@ -18,7 +18,7 @@ export function DrumPads({ isRecording, lastDrumType, onDrumHit }: DrumPadsProps
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="text-sm text-gray-400 mb-2">
-        {isRecording ? '🔴 Tryck på trummorna!' : 'Starta inspelning först'}
+        {isRecording ? '🔴 Tap the drums!' : 'Start recording first'}
       </div>
       
       <div className="flex gap-4">
@@ -75,7 +75,7 @@ export function DrumPads({ isRecording, lastDrumType, onDrumHit }: DrumPadsProps
       </div>
       
       <div className="text-xs text-gray-500 text-center max-w-xs">
-        Tryck på knapparna i takt med metronomen för att spela in trummor
+        Tap the pads in time with the metronome to record drums
       </div>
     </div>
   )

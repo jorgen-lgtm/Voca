@@ -71,9 +71,9 @@ export function PitchDisplay({ pitch, audioLevel = 0, isRecording, isDrumMode, i
           </div>
           
           <div className="text-xs text-gray-400 text-center max-w-xs">
-            Prata och variera rösten - melodin följer din intonation!
+            Speak and vary your voice - the melody follows your intonation!
             <br />
-            <span className="text-cyan-400/70">↗️ Röst upp = ton upp • ↘️ Röst ner = ton ner</span>
+            <span className="text-cyan-400/70">↗️ Voice up = note up • ↘️ Voice down = note down</span>
           </div>
         </div>
       </motion.div>
@@ -197,12 +197,12 @@ export function PitchDisplay({ pitch, audioLevel = 0, isRecording, isDrumMode, i
                   ))}
                 </div>
                 <span className="text-sm text-gray-400">
-                  {audioLevel > 0.1 ? 'Lyssnar...' : 'Nynna eller sjung'}
+                  {audioLevel > 0.1 ? 'Listening...' : 'Hum or sing'}
                 </span>
               </div>
               {audioLevel < 0.05 && (
                 <span className="text-xs text-amber-400">
-                  🎤 Inget ljud - kontrollera mikrofonen
+                  🎤 No sound - check your microphone
                 </span>
               )}
             </motion.div>

@@ -40,11 +40,11 @@ export function RecordButton({
         if (success) {
           setTimeout(() => onPress(), 100)
         } else {
-          setError('Kunde inte starta ljud')
+          setError('Could not start audio')
         }
       } catch (err) {
         console.error('Init error:', err)
-        setError('Tillåt mikrofon-åtkomst')
+        setError('Allow microphone access')
       } finally {
         setIsInitializing(false)
       }
@@ -141,7 +141,7 @@ export function RecordButton({
 
         {!isInitialized && !error && (
           <div className="absolute -bottom-8 text-xs text-gray-400 whitespace-nowrap">
-            Tryck för att starta
+            Tap to start
           </div>
         )}
         
@@ -153,7 +153,7 @@ export function RecordButton({
         
         {isInitializing && (
           <div className="absolute -bottom-8 text-xs text-yellow-400 whitespace-nowrap animate-pulse">
-            Startar...
+            Starting...
           </div>
         )}
       </motion.button>

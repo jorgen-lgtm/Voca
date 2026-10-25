@@ -84,7 +84,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       scale: 'major',
     })
     updateLoops(enhanced)
-    setAiMessage('✨ Alla spår har förbättrats!')
+    setAiMessage('✨ All tracks enhanced!')
     setTimeout(() => setAiMessage(null), 3000)
   }
 
@@ -95,7 +95,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       notes: quantizeNotes(loop.notes, state.tempo, 0.25)
     }))
     updateLoops(quantized)
-    setAiMessage('🎵 Noter kvantiserade till takten!')
+    setAiMessage('🎵 Notes quantized to the beat!')
     setTimeout(() => setAiMessage(null), 3000)
   }
 
@@ -167,7 +167,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                 onClick={clearAllLoops}
                 className="px-3 py-1.5 text-sm bg-gray-800/80 rounded-full text-gray-300 hover:bg-gray-700/80 transition-colors"
               >
-                Rensa
+                Clear
               </motion.button>
             </>
           )}
@@ -212,8 +212,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                   onClick={handleEnhanceAll}
                   className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 text-left hover:border-purple-400/50 transition-colors disabled:opacity-50"
                 >
-                  <div className="font-medium text-white text-sm">✨ Förbättra alla spår</div>
-                  <div className="text-xs text-gray-400">Kvantisera, jämna ut & snäpp till skala</div>
+                  <div className="font-medium text-white text-sm">✨ Enhance all tracks</div>
+                  <div className="text-xs text-gray-400">Quantize, smooth & snap to scale</div>
                 </motion.button>
 
                 <motion.button
@@ -223,8 +223,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                   onClick={handleQuantize}
                   className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
                 >
-                  <div className="font-medium text-white text-sm">🎵 Kvantisera</div>
-                  <div className="text-xs text-gray-400">Snäpp noter till takten</div>
+                  <div className="font-medium text-white text-sm">🎵 Quantize</div>
+                  <div className="text-xs text-gray-400">Snap notes to the beat</div>
                 </motion.button>
               </div>
 
@@ -413,12 +413,12 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       >
         {state.isInitialized ? (
           state.isRecording ? (
-            <><span className="text-red-500">●</span> Spelar in...</>
+            <><span className="text-red-500">●</span> Recording...</>
           ) : (
-            <><span className="text-green-500">●</span> {loops.length} {loops.length === 1 ? 'spår' : 'spår'} • Klicka på en ring för att redigera</>
+            <><span className="text-green-500">●</span> {loops.length} {loops.length === 1 ? 'track' : 'tracks'} • Click a ring to edit</>
           )
         ) : (
-          'Tryck på knappen för att starta'
+          'Tap the button to start'
         )}
       </motion.div>
     </div>

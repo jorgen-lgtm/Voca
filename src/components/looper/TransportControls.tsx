@@ -10,6 +10,7 @@ interface TransportControlsProps {
   onTogglePlay: () => void
   onTempoChange: (tempo: number) => void
   onSave?: () => void
+  onExport?: () => void
   isPro?: boolean
 }
 
@@ -20,6 +21,7 @@ export function TransportControls({
   onTogglePlay,
   onTempoChange,
   onSave,
+  onExport,
   isPro = false,
 }: TransportControlsProps) {
   const [showTempoSlider, setShowTempoSlider] = useState(false)
@@ -66,6 +68,23 @@ export function TransportControls({
 
         <motion.button
           onClick={onSave}
+          disabled={!hasLoops}
+          whileHover={{ scale: hasLoops ? 1.05 : 1 }}
+          whileTap={{ scale: hasLoops ? 0.95 : 1 }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-colors ${
+            hasLoops
+              ? 'bg-gray-800/60 border-gray-700/50 text-gray-300 hover:text-white hover:border-green-500/50'
+              : 'bg-gray-800/30 border-gray-700/30 text-gray-500 cursor-not-allowed'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          <span className="text-sm">Save</span>
+        </motion.button>
+
+        <motion.button
+          onClick={onExport}
           disabled={!hasLoops}
           whileHover={{ scale: hasLoops ? 1.05 : 1 }}
           whileTap={{ scale: hasLoops ? 0.95 : 1 }}

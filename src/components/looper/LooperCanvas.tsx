@@ -1,20 +1,27 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { RecordButton } from './RecordButton'
 import { LoopRing } from './LoopRing'
 import { InstrumentSelector } from './InstrumentSelector'
 import { TransportControls } from './TransportControls'
 import { PitchDisplay } from './PitchDisplay'
+import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import type { InstrumentType } from '@/types/database'
+import type { RecordedLoop } from '@/types/audio'
 
 interface LooperCanvasProps {
-  onSave?: () => void
+  onSave?: (loops: RecordedLoop[], tempo: number) => void
   isPro?: boolean
+  initialLoops?: RecordedLoop[]
+  initialTempo?: number
 }
 
-export function LooperCanvas({ onSave, isPro = false }: LooperCanvasProps) {
+export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo = 120 }: LooperCanvasProps) {
+  const [showExportModal, setShowExportModal] = useState(false)
+  
   const {
     state,
     currentPitch,
@@ -29,7 +36,19 @@ export function LooperCanvas({ onSave, isPro = false }: LooperCanvasProps) {
     setTempo,
     cycleInstrument,
     setCurrentInstrument,
-  } = useAudioEngine({ tempo: 120, loopBars: 4 })
+  } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
+
+  const handleSave = () => {
+    if (onSave && loops.length > 0) {
+      onSave(loops, state.tempo)
+    }
+  }
+
+  const handleExport = () => {
+    if (loops.length > 0) {
+      setShowExportModal(true)
+    }
+  }
 
   const handleSwipeInstrument = (loopId: string, direction: 'left' | 'right') => {
     const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
@@ -122,7 +141,16 @@ export function LooperCanvas({ onSave, isPro = false }: LooperCanvasProps) {
         hasLoops={loops.length > 0}
         onTogglePlay={togglePlayback}
         onTempoChange={setTempo}
-        onSave={onSave}
+        onSave={handleSave}
+        onExport={handleExport}
+        isPro={isPro}
+      />
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        loops={loops}
+        tempo={state.tempo}
         isPro={isPro}
       />
 

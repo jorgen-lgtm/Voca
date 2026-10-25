@@ -237,6 +237,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             onSwipeRight={() => handleSwipeInstrument(loop.id, 'right')}
             onDelete={() => deleteLoop(loop.id)}
             onVolumeChange={(volume) => setLoopVolume(loop.id, volume)}
+            canEditVolume={!state.isPlaying}
           />
         ))}
 

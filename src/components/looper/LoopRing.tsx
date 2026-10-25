@@ -14,6 +14,7 @@ interface LoopRingProps {
   onSwipeRight: () => void
   onDelete: () => void
   onVolumeChange?: (volume: number) => void
+  canEditVolume?: boolean
 }
 
 const INSTRUMENT_ICONS: Record<InstrumentType, string> = {
@@ -34,6 +35,7 @@ export function LoopRing({
   onSwipeRight,
   onDelete,
   onVolumeChange,
+  canEditVolume = true,
 }: LoopRingProps) {
   const controls = useAnimation()
   const ringRef = useRef<HTMLDivElement>(null)
@@ -210,36 +212,44 @@ export function LoopRing({
             </button>
           </div>
           
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={(loop.volume ?? 1) * 100}
-            onChange={(e) => onVolumeChange?.(parseInt(e.target.value) / 100)}
-            className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500 touch-none"
-            style={{ WebkitAppearance: 'none' }}
-          />
-          
-          <div className="flex justify-between mt-4 gap-2">
-            <button
-              onClick={() => onVolumeChange?.(0)}
-              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-            >
-              🔇 Mute
-            </button>
-            <button
-              onClick={() => onVolumeChange?.(0.5)}
-              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-            >
-              50%
-            </button>
-            <button
-              onClick={() => onVolumeChange?.(1)}
-              className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-            >
-              100%
-            </button>
-          </div>
+          {!canEditVolume ? (
+            <div className="text-center py-4 text-amber-400 text-sm">
+              ⏸️ Stoppa uppspelningen för att ändra volym
+            </div>
+          ) : (
+            <>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={(loop.volume ?? 1) * 100}
+                onChange={(e) => onVolumeChange?.(parseInt(e.target.value) / 100)}
+                className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500 touch-none"
+                style={{ WebkitAppearance: 'none' }}
+              />
+              
+              <div className="flex justify-between mt-4 gap-2">
+                <button
+                  onClick={() => onVolumeChange?.(0)}
+                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
+                >
+                  🔇 Mute
+                </button>
+                <button
+                  onClick={() => onVolumeChange?.(0.5)}
+                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
+                >
+                  50%
+                </button>
+                <button
+                  onClick={() => onVolumeChange?.(1)}
+                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
+                >
+                  100%
+                </button>
+              </div>
+            </>
+          )}
         </motion.div>
       )}
     </motion.div>

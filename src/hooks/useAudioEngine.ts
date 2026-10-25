@@ -233,17 +233,17 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       analyserRef.current.smoothingTimeConstant = 0.1
       source.connect(analyserRef.current)
       
-      // Initialize YIN pitch detector (more accurate than autocorrelation)
+      // Initialize pitch detector using YIN algorithm
       const sampleRate = audioContextRef.current.sampleRate
-      console.log('Creating YIN detector with sample rate:', sampleRate)
+      console.log('Creating YIN pitch detector with sample rate:', sampleRate)
       
       pitchDetectorRef.current = Pitchfinder.YIN({ 
-        sampleRate: sampleRate,
-        threshold: 0.15,
-        probabilityThreshold: 0.1,
+        sampleRate, 
+        threshold: 0.2,
+        probabilityThreshold: 0.1 
       })
       
-      console.log('YIN pitch detector initialized:', pitchDetectorRef.current)
+      console.log('YIN pitch detector initialized')
 
       masterVolumeRef.current = new Tone.Volume(0).toDestination()
 

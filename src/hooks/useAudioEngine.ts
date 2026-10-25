@@ -119,7 +119,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       pitchDetectorRef.current = PitchFinder.YIN({
         sampleRate: audioContextRef.current.sampleRate,
-        threshold: 0.15,
+        threshold: 0.1,
       })
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
@@ -152,7 +152,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.015
+    const minVolume = 0.005
     if (rms < minVolume) {
       pitchHistoryRef.current = []
       stablePitchCountRef.current = 0
@@ -162,16 +162,16 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const frequency = pitchDetectorRef.current(buffer)
 
-    if (frequency && frequency > 80 && frequency < 1200) {
+    if (frequency && frequency > 60 && frequency < 2000) {
       const midiNote = frequencyToMidi(frequency)
       
       pitchHistoryRef.current.push(midiNote)
-      if (pitchHistoryRef.current.length > 5) {
+      if (pitchHistoryRef.current.length > 3) {
         pitchHistoryRef.current.shift()
       }
 
-      const allSame = pitchHistoryRef.current.length >= 3 && 
-        pitchHistoryRef.current.slice(-3).every(n => n === midiNote)
+      const allSame = pitchHistoryRef.current.length >= 2 && 
+        pitchHistoryRef.current.slice(-2).every(n => n === midiNote)
 
       if (allSame) {
         stablePitchCountRef.current++
@@ -180,17 +180,17 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       }
 
       const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 10, 1)
+      const clarity = Math.min(rms * 15, 1)
 
       const result: PitchDetectionResult = {
         frequency,
         clarity,
-        midiNote: stablePitchCountRef.current >= 2 ? midiNote : null,
-        noteName: stablePitchCountRef.current >= 2 ? noteName : null,
+        midiNote: stablePitchCountRef.current >= 1 ? midiNote : null,
+        noteName: stablePitchCountRef.current >= 1 ? noteName : null,
       }
 
       setCurrentPitch(result)
-      return stablePitchCountRef.current >= 2 ? result : null
+      return stablePitchCountRef.current >= 1 ? result : null
     }
 
     pitchHistoryRef.current = []
@@ -224,7 +224,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.05) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.02) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

@@ -423,6 +423,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     lastNoteRef.current = null
     isRecordingRef.current = true
 
+    // Ensure transport is running for metronome during recording
+    const transport = Tone.getTransport()
+    if (transport.state !== 'started' && metronomeEnabledRef.current) {
+      transport.start()
+    }
+
     setState((prev) => ({ ...prev, isRecording: true }))
 
     const analyzeLoop = () => {
@@ -553,7 +559,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
-      const velocity = event.volume || 1
+      const velocity = event.volume ?? 1
+      
+      // Skip muted tracks (volume = 0)
+      if (velocity <= 0) {
+        return
+      }
       
       if (event.instrument === 'drums' && drumKitRef.current) {
         const midiToDrum: Record<number, 'kick' | 'snare' | 'hihat'> = {

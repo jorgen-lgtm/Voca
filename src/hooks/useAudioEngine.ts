@@ -447,8 +447,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const level = Math.min(rms * 50, 1)
     setAudioLevel(level)
 
-    const isVoiceMode = currentInstrument === 'voice'
-    const minVolume = isVoiceMode ? 0.003 : 0.001
+    const minVolume = 0.003
     
     if (rms < minVolume) {
       lastDetectedPitchRef.current = null
@@ -460,123 +459,79 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
     const frequency = pitchDetectorRef.current(buffer)
 
-    // VOICE MODE: Focus on melody contour, not exact pitch
-    if (isVoiceMode) {
-      let melodyNote: number
-      
-      if (frequency && frequency > 60 && frequency < 600) {
-        // Detect direction of pitch change
-        if (lastVoiceFreqRef.current !== null) {
-          const freqDiff = frequency - lastVoiceFreqRef.current
-          const threshold = 15 // Hz difference to count as direction change
-          
-          if (freqDiff > threshold) {
-            melodyDirectionRef.current = 'up'
-          } else if (freqDiff < -threshold) {
-            melodyDirectionRef.current = 'down'
-          } else {
-            melodyDirectionRef.current = 'steady'
-          }
+    // CONTOUR-BASED MELODY DETECTION for all instruments
+    // Follows the direction of your voice instead of exact pitches
+    // This works much better for singing/humming input
+    
+    // Set octave range based on instrument
+    let minNote = 48 // C3
+    let maxNote = 72 // C5
+    if (currentInstrument === 'bass') {
+      minNote = 28 // E1
+      maxNote = 48 // C3
+    } else if (currentInstrument === 'guitar') {
+      minNote = 40 // E2
+      maxNote = 64 // E4
+    }
+    
+    let melodyNote: number
+    
+    if (frequency && frequency > 60 && frequency < 800) {
+      // Detect direction of pitch change
+      if (lastVoiceFreqRef.current !== null) {
+        const freqDiff = frequency - lastVoiceFreqRef.current
+        const threshold = 12 // Hz difference to count as direction change
+        
+        if (freqDiff > threshold) {
+          melodyDirectionRef.current = 'up'
+        } else if (freqDiff < -threshold) {
+          melodyDirectionRef.current = 'down'
+        } else {
+          melodyDirectionRef.current = 'steady'
         }
-        lastVoiceFreqRef.current = frequency
-        
-        // Move melody note based on direction
-        melodyNote = getNextScaleNote(voiceBaseNoteRef.current, melodyDirectionRef.current)
-        
-        // Keep melody in reasonable range (C3 to C5)
-        melodyNote = Math.max(48, Math.min(72, melodyNote))
-        voiceBaseNoteRef.current = melodyNote
-        
-      } else if (rms > 0.01) {
-        // No clear pitch but sound detected - use volume for rhythm
-        // Small random variation to keep it interesting
-        const variation = Math.random() > 0.5 ? 'up' : 'down'
-        melodyNote = getNextScaleNote(voiceBaseNoteRef.current, rms > 0.05 ? variation : 'steady')
-        melodyNote = Math.max(48, Math.min(72, melodyNote))
-        voiceBaseNoteRef.current = melodyNote
-      } else {
-        return null
       }
+      lastVoiceFreqRef.current = frequency
       
-      // Only trigger if note changed
-      if (lastDetectedPitchRef.current !== melodyNote) {
-        lastDetectedPitchRef.current = melodyNote
-        
-        const noteName = midiToNoteName(melodyNote)
-        const result: PitchDetectionResult = {
-          frequency,
-          clarity: Math.min(rms * 20, 1),
-          midiNote: melodyNote,
-          noteName,
-        }
-        setCurrentPitch(result)
-        return result
-      }
+      // Move melody note based on direction
+      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, melodyDirectionRef.current)
       
-      setCurrentPitch({
-        frequency,
-        clarity: Math.min(rms * 20, 1),
-        midiNote: lastDetectedPitchRef.current,
-        noteName: lastDetectedPitchRef.current ? midiToNoteName(lastDetectedPitchRef.current) : null,
-      })
+      // Keep melody in instrument's range
+      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
+      voiceBaseNoteRef.current = melodyNote
+      
+    } else if (rms > 0.01) {
+      // No clear pitch but sound detected - small movement
+      const variation = Math.random() > 0.5 ? 'up' : 'down'
+      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, rms > 0.05 ? variation : 'steady')
+      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
+      voiceBaseNoteRef.current = melodyNote
+    } else {
       return null
     }
-
-    // NON-VOICE MODE: Standard pitch detection for singing/humming
-    const minFreq = 80   // Lowest reasonable singing note
-    const maxFreq = 1000 // Highest reasonable singing note
     
-    if (frequency && frequency > minFreq && frequency < maxFreq) {
-      let midiNote = frequencyToMidi(frequency)
+    // Only trigger if note changed
+    if (lastDetectedPitchRef.current !== melodyNote) {
+      lastDetectedPitchRef.current = melodyNote
       
-      // Snap to nearest note in pentatonic scale for more musical results
-      midiNote = snapToScale(midiNote)
-      
-      const pitchTolerance = 2 // semitones
-      const lastPitch = lastDetectedPitchRef.current
-      
-      // Check if pitch is stable (within tolerance of last pitch)
-      if (lastPitch !== null && Math.abs(midiNote - lastPitch) <= pitchTolerance) {
-        pitchStabilityCountRef.current++
-        // Keep the last pitch if we're within tolerance (reduces jitter)
-        midiNote = lastPitch
-      } else if (lastPitch !== null && Math.abs(midiNote - lastPitch) > 5) {
-        // Big jump - might be an octave error, check for octave relationship
-        const octaveDiff = Math.abs(midiNote - lastPitch)
-        if (octaveDiff === 12 || octaveDiff === 24) {
-          // Likely octave jump error - dampen it
-          midiNote = lastPitch
-          pitchStabilityCountRef.current++
-        } else {
-          // Genuine note change
-          pitchStabilityCountRef.current = 1
-        }
-      } else {
-        pitchStabilityCountRef.current = 1
-      }
-      
-      lastDetectedPitchRef.current = midiNote
-
-      // Always return a result for responsive feedback
-      const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 30, 1)
-
+      const noteName = midiToNoteName(melodyNote)
       const result: PitchDetectionResult = {
         frequency,
-        clarity,
-        midiNote,
+        clarity: Math.min(rms * 20, 1),
+        midiNote: melodyNote,
         noteName,
       }
-
       setCurrentPitch(result)
       return result
     }
-
-    lastDetectedPitchRef.current = null
-    pitchStabilityCountRef.current = 0
-    setCurrentPitch(null)
+    
+    setCurrentPitch({
+      frequency,
+      clarity: Math.min(rms * 20, 1),
+      midiNote: lastDetectedPitchRef.current,
+      noteName: lastDetectedPitchRef.current ? midiToNoteName(lastDetectedPitchRef.current) : null,
+    })
     return null
-  }, [currentInstrument, getNextScaleNote, snapToScale])
+  }, [currentInstrument, getNextScaleNote])
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)

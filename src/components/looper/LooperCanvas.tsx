@@ -40,6 +40,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     loops,
     currentInstrument,
     loadingInstruments,
+    masterLoopDuration,
+    loopProgress,
     initializeAudio,
     startRecording,
     stopRecording,
@@ -287,6 +289,34 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           />
         ))}
 
+        {/* Loop progress ring - shows when recording to existing loop length */}
+        {state.isRecording && masterLoopDuration && (
+          <svg
+            className="absolute w-36 h-36 -rotate-90"
+            viewBox="0 0 100 100"
+          >
+            <circle
+              cx="50"
+              cy="50"
+              r="46"
+              fill="none"
+              stroke="rgba(168, 85, 247, 0.3)"
+              strokeWidth="4"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r="46"
+              fill="none"
+              stroke="rgb(168, 85, 247)"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${loopProgress * 289} 289`}
+              className="transition-all duration-100"
+            />
+          </svg>
+        )}
+
         <RecordButton
           isRecording={state.isRecording}
           isInitialized={state.isInitialized}
@@ -296,6 +326,16 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           disabled={loopsAtLimit && state.isInitialized}
         />
       </div>
+
+      {/* Master loop indicator */}
+      {masterLoopDuration && !state.isRecording && (
+        <div className="text-center text-sm text-purple-400 mb-2">
+          Loop length: {masterLoopDuration.toFixed(1)}s
+          <span className="text-gray-500 ml-2">
+            (set by first track)
+          </span>
+        </div>
+      )}
 
       {/* Loop Editor Panel */}
       <AnimatePresence>

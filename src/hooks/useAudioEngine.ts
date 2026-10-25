@@ -198,6 +198,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
+  const [masterLoopDuration, setMasterLoopDuration] = useState<number | null>(null)
+  const [loopProgress, setLoopProgress] = useState<number>(0)
+  const masterLoopDurationRef = useRef<number | null>(null)
   const [loadingInstruments] = useState<Set<InstrumentType>>(new Set())
 
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -629,17 +632,35 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     setState((prev) => ({ ...prev, isRecording: true }))
+    setLoopProgress(0)
 
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
+
+      const currentTime = Tone.now() - recordingStartTimeRef.current
+      
+      // Update loop progress
+      if (masterLoopDurationRef.current) {
+        const progress = Math.min(currentTime / masterLoopDurationRef.current, 1)
+        setLoopProgress(progress)
+        
+        // Auto-stop when master loop duration is reached
+        if (currentTime >= masterLoopDurationRef.current) {
+          // Use setTimeout to avoid calling stopRecording from within analyzeLoop
+          setTimeout(() => {
+            if (isRecordingRef.current) {
+              stopRecordingInternal()
+            }
+          }, 0)
+          return
+        }
+      }
 
       // Only do pitch detection if mic is enabled and not drums
       if (currentInstrument !== 'drums' && micEnabledRef.current) {
         const pitch = detectPitch()
 
         if (pitch && pitch.midiNote) {
-          const currentTime = Tone.now() - recordingStartTimeRef.current
-
           if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {
             if (lastNoteRef.current) {
               const duration = currentTime - lastNoteRef.current.startTime
@@ -655,7 +676,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             triggerNote(pitch.midiNote)
           }
         } else if (lastNoteRef.current) {
-          const currentTime = Tone.now() - recordingStartTimeRef.current
           const duration = currentTime - lastNoteRef.current.startTime
           recordingNotesRef.current.push({
             pitch: lastNoteRef.current.midi,
@@ -675,11 +695,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     analyzeLoop()
   }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio])
 
-  const stopRecording = useCallback((): RecordedLoop | null => {
+  const stopRecordingInternal = useCallback((): RecordedLoop | null => {
     if (!isRecordingRef.current) return null
 
     isRecordingRef.current = false
     setState((prev) => ({ ...prev, isRecording: false }))
+    setLoopProgress(0)
 
     if (masterVolumeRef.current) {
       masterVolumeRef.current.volume.rampTo(0, 0.1)
@@ -700,10 +721,74 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       })
     }
 
-    const recordingDuration = Tone.now() - recordingStartTimeRef.current
+    let recordingDuration = Tone.now() - recordingStartTimeRef.current
 
     if (recordingNotesRef.current.length === 0) {
       return null
+    }
+
+    // If this is the first loop, it sets the master duration
+    // Otherwise, use the master duration
+    const isFirstLoop = masterLoopDurationRef.current === null
+    if (isFirstLoop) {
+      // First loop - set it as master
+      masterLoopDurationRef.current = recordingDuration
+      setMasterLoopDuration(recordingDuration)
+    } else {
+      // Subsequent loops - use master duration
+      recordingDuration = masterLoopDurationRef.current!
+    }
+
+    // AUTO AI ENHANCEMENT - clean up notes automatically
+    let cleanedNotes = [...recordingNotesRef.current]
+    
+    // Skip AI for drums - they don't need melodic cleanup
+    if (currentInstrument !== 'drums') {
+      // 1. Remove very short notes (noise)
+      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.08)
+      
+      // 2. Remove outlier notes (jumps > octave from neighbors)
+      if (cleanedNotes.length >= 3) {
+        const sorted = cleanedNotes.sort((a, b) => a.startTime - b.startTime)
+        cleanedNotes = sorted.filter((note, i) => {
+          const prev = i > 0 ? sorted[i - 1] : null
+          const next = i < sorted.length - 1 ? sorted[i + 1] : null
+          const prevDiff = prev ? Math.abs(note.pitch - prev.pitch) : 0
+          const nextDiff = next ? Math.abs(note.pitch - next.pitch) : 0
+          // Remove if jumps > octave from both neighbors
+          if (prev && next && prevDiff > 12 && nextDiff > 12) return false
+          // Remove short notes that jump far
+          if (note.duration < 0.12 && (prevDiff > 7 || nextDiff > 7)) return false
+          return true
+        })
+      }
+      
+      // 3. Consolidate consecutive similar notes
+      if (cleanedNotes.length >= 2) {
+        const consolidated: MidiNote[] = []
+        let i = 0
+        while (i < cleanedNotes.length) {
+          const current = { ...cleanedNotes[i] }
+          let j = i + 1
+          while (j < cleanedNotes.length) {
+            const next = cleanedNotes[j]
+            const gap = next.startTime - (current.startTime + current.duration)
+            const pitchDiff = Math.abs(next.pitch - current.pitch)
+            if (pitchDiff <= 2 && gap < 0.2 && gap > -0.1) {
+              current.duration = (next.startTime + next.duration) - current.startTime
+              j++
+            } else {
+              break
+            }
+          }
+          consolidated.push(current)
+          i = j
+        }
+        cleanedNotes = consolidated
+      }
+      
+      // 4. Final filter - minimum duration
+      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.1)
     }
 
     const config = getInstrumentConfig(currentInstrument)
@@ -711,7 +796,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const newLoop: RecordedLoop = {
       id: crypto.randomUUID(),
       instrumentType: currentInstrument,
-      notes: [...recordingNotesRef.current],
+      notes: cleanedNotes,
       duration: recordingDuration,
       color: config.color,
       volume: 1,
@@ -721,6 +806,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     
     return newLoop
   }, [currentInstrument])
+
+  const stopRecording = useCallback((): RecordedLoop | null => {
+    return stopRecordingInternal()
+  }, [stopRecordingInternal])
 
   const playDrumNote = useCallback((midiNote: number, time: number, velocity: number) => {
     if (!drumKitRef.current || velocity <= 0) return
@@ -888,6 +977,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const clearAllLoops = useCallback(() => {
     stopPlayback()
     setLoops([])
+    // Reset master loop duration so next recording starts fresh
+    masterLoopDurationRef.current = null
+    setMasterLoopDuration(null)
+    setLoopProgress(0)
   }, [stopPlayback])
 
   const setTempo = useCallback((newTempo: number) => {
@@ -1040,6 +1133,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     loops,
     currentInstrument,
     loadingInstruments,
+    masterLoopDuration,
+    loopProgress,
     initializeAudio,
     startRecording,
     stopRecording,

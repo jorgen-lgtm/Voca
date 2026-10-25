@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { shouldGrantProStatus, isAdminEmail } from '@/config/admin'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 
@@ -76,11 +77,17 @@ export function useAuth() {
     await supabase.auth.signOut()
   }
 
-  const isPro = state.profile?.pro_status ?? false
+  const isPro = shouldGrantProStatus(
+    state.user?.email,
+    state.profile?.pro_status ?? false
+  )
+  
+  const isAdmin = isAdminEmail(state.user?.email)
 
   return {
     ...state,
     signOut,
     isPro,
+    isAdmin,
   }
 }

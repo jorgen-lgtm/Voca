@@ -6,9 +6,10 @@ import { motion } from 'framer-motion'
 interface RecordButtonProps {
   isRecording: boolean
   isInitialized: boolean
-  onPress: () => void
+  onPress?: () => void
   onRelease: () => void
   onInitialize: () => Promise<boolean>
+  disabled?: boolean
 }
 
 export function RecordButton({
@@ -17,6 +18,7 @@ export function RecordButton({
   onPress,
   onRelease,
   onInitialize,
+  disabled = false,
 }: RecordButtonProps) {
   const [isInitializing, setIsInitializing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,9 +39,9 @@ export function RecordButton({
       setIsInitializing(true)
       try {
         const success = await onInitialize()
-        if (success) {
+        if (success && onPress) {
           setTimeout(() => onPress(), 100)
-        } else {
+        } else if (!success) {
           setError('Could not start audio')
         }
       } catch (err) {
@@ -53,10 +55,10 @@ export function RecordButton({
 
     if (isRecording) {
       onRelease()
-    } else {
+    } else if (!disabled && onPress) {
       onPress()
     }
-  }, [isInitialized, isRecording, onInitialize, onPress, onRelease])
+  }, [isInitialized, isRecording, onInitialize, onPress, onRelease, disabled])
 
   return (
     <div className="relative flex items-center justify-center">
@@ -79,14 +81,16 @@ export function RecordButton({
 
       <motion.button
         onPointerUp={handleInteraction}
-        disabled={isInitializing}
+        disabled={isInitializing || (disabled && !isRecording)}
         className={`relative w-28 h-28 rounded-full flex items-center justify-center touch-none select-none ${
           isInitializing
             ? 'bg-gradient-to-br from-yellow-500 to-orange-600'
             : isRecording
               ? 'bg-gradient-to-br from-red-500 to-red-700'
-              : 'bg-gradient-to-br from-purple-500 to-purple-700'
-        } shadow-2xl disabled:opacity-80`}
+              : disabled
+                ? 'bg-gradient-to-br from-gray-500 to-gray-700'
+                : 'bg-gradient-to-br from-purple-500 to-purple-700'
+        } shadow-2xl disabled:opacity-60`}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         animate={{
@@ -96,7 +100,9 @@ export function RecordButton({
                 '0 0 40px rgba(239,68,68,0.8)',
                 '0 0 20px rgba(239,68,68,0.5)',
               ]
-            : '0 0 20px rgba(139,92,246,0.5)',
+            : disabled
+              ? '0 0 10px rgba(100,100,100,0.3)'
+              : '0 0 20px rgba(139,92,246,0.5)',
         }}
         transition={{
           boxShadow: {
@@ -154,6 +160,12 @@ export function RecordButton({
         {isInitializing && (
           <div className="absolute -bottom-8 text-xs text-yellow-400 whitespace-nowrap animate-pulse">
             Starting...
+          </div>
+        )}
+
+        {disabled && isInitialized && !isRecording && (
+          <div className="absolute -bottom-8 text-xs text-yellow-400 whitespace-nowrap">
+            Loop limit reached
           </div>
         )}
       </motion.button>

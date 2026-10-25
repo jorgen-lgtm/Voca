@@ -110,6 +110,37 @@ export function ExportModal({ isOpen, onClose, loops, tempo, isPro }: ExportModa
                   </div>
                 </motion.button>
 
+                <div
+                  className={`w-full p-4 rounded-xl border transition-all text-left ${
+                    isPro
+                      ? 'bg-gray-700/30 border-gray-600/30'
+                      : 'bg-gray-700/30 border-gray-600/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        isPro ? 'bg-blue-500/20' : 'bg-gray-600/20'
+                      }`}>
+                        <svg className={`w-5 h-5 ${isPro ? 'text-blue-400' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className={`font-medium ${isPro ? 'text-gray-300' : 'text-gray-400'}`}>
+                          Export as Audio
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          High-quality WAV file
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                      {isPro ? 'Coming Soon' : 'PRO'}
+                    </span>
+                  </div>
+                </div>
+
                 <motion.button
                   onClick={handleExportJson}
                   disabled={exporting}

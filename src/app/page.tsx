@@ -10,7 +10,7 @@ import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
   const { user, loading, signOut, isPro } = useAuth()
-  const { createProject, saveLoopsToProject, loading: saving } = useProjects()
+  const { createProject, saveLoopsToProject, loading: saving, error: saveError } = useProjects()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [projectTitle, setProjectTitle] = useState('')
@@ -34,7 +34,7 @@ export default function HomePage() {
   const handleConfirmSave = async () => {
     if (!projectTitle.trim()) return
 
-    const project = await createProject(projectTitle.trim(), pendingTempo)
+    const project = await createProject(projectTitle.trim(), pendingTempo, isPro)
     if (project) {
       const success = await saveLoopsToProject(project.id, pendingLoops)
       if (success) {
@@ -208,6 +208,20 @@ export default function HomePage() {
                       <span>•</span>
                       <span>{pendingTempo} BPM</span>
                     </div>
+
+                    {saveError && (
+                      <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30">
+                        <p className="text-sm text-red-300">{saveError}</p>
+                        {saveError.includes('limit') && !isPro && (
+                          <button
+                            onClick={() => router.push('/upgrade')}
+                            className="mt-2 text-xs font-medium text-purple-400 hover:text-purple-300"
+                          >
+                            Upgrade to Pro →
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex gap-3 pt-2">
                       <motion.button

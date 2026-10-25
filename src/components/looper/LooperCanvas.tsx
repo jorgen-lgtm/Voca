@@ -14,6 +14,7 @@ import { MiniKeyboard } from './MiniKeyboard'
 import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
+import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
 import type { RecordedLoop } from '@/types/audio'
 
 interface LooperCanvasProps {
@@ -61,6 +62,9 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const selectedLoop = loops.find(l => l.id === selectedLoopId)
+  const maxLoops = getMaxLoops(isPro)
+  const canAddMoreLoops = loops.length < maxLoops
+  const loopsAtLimit = loops.length >= maxLoops
 
   const handleSave = () => {
     if (onSave && loops.length > 0) {
@@ -280,9 +284,10 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         <RecordButton
           isRecording={state.isRecording}
           isInitialized={state.isInitialized}
-          onPress={startRecording}
+          onPress={canAddMoreLoops ? startRecording : undefined}
           onRelease={stopRecording}
           onInitialize={initializeAudio}
+          disabled={loopsAtLimit && state.isInitialized}
         />
       </div>
 
@@ -414,8 +419,19 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         {state.isInitialized ? (
           state.isRecording ? (
             <><span className="text-red-500">●</span> Recording...</>
+          ) : loopsAtLimit ? (
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-yellow-400">
+                Loop limit reached ({loops.length}/{FREE_LIMITS.MAX_CONCURRENT_LOOPS})
+              </span>
+              {!isPro && (
+                <Link href="/upgrade" className="text-purple-400 hover:text-purple-300 underline">
+                  Upgrade to Pro for unlimited loops
+                </Link>
+              )}
+            </div>
           ) : (
-            <><span className="text-green-500">●</span> {loops.length} {loops.length === 1 ? 'track' : 'tracks'} • Click a ring to edit</>
+            <><span className="text-green-500">●</span> {loops.length}/{maxLoops} tracks • Click a ring to edit</>
           )
         ) : (
           'Tap the button to start'

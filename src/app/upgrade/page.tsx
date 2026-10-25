@@ -8,13 +8,14 @@ import { useAuth } from '@/hooks/useAuth'
 const FEATURES = {
   free: [
     'Unlimited loop recording',
-    'All 6 instruments',
+    'All 9 instruments',
     '4 concurrent loops',
     'Save up to 5 projects',
     'JSON export',
   ],
   pro: [
     'Everything in Free, plus:',
+    'Unlimited loops',
     'Unlimited projects',
     'MIDI export',
     'High-quality audio export',

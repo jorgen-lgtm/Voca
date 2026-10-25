@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { MidiData, InstrumentType } from '@/types/database'
 import type { RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
+import { getMaxProjects, FREE_LIMITS } from '@/config/limits'
 
 interface Project {
   id: string
@@ -56,13 +57,35 @@ export function useProjects() {
     setLoading(false)
   }, [supabase])
 
-  const createProject = useCallback(async (title: string, tempo: number = 120): Promise<Project | null> => {
+  const createProject = useCallback(async (
+    title: string, 
+    tempo: number = 120,
+    isPro: boolean = false
+  ): Promise<Project | null> => {
     setLoading(true)
     setError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setError('You must be logged in to create a project')
+      setLoading(false)
+      return null
+    }
+
+    const { count, error: countError } = await supabase
+      .from('projects')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    if (countError) {
+      setError(countError.message)
+      setLoading(false)
+      return null
+    }
+
+    const maxProjects = getMaxProjects(isPro)
+    if ((count ?? 0) >= maxProjects) {
+      setError(`Project limit reached (${FREE_LIMITS.MAX_PROJECTS}). Upgrade to Pro for unlimited projects.`)
       setLoading(false)
       return null
     }

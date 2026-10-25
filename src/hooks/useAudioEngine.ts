@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
-import * as PitchFinder from 'pitchfinder'
+import PitchFinder from 'pitchfinder'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 
@@ -27,37 +27,43 @@ function midiToNoteName(midi: number): string {
 }
 
 function createInstrument(type: InstrumentType): Tone.PolySynth | Tone.MembraneSynth {
+  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).toDestination()
+  
   switch (type) {
     case 'drums':
-      return new Tone.MembraneSynth().toDestination()
+      return new Tone.MembraneSynth({
+        pitchDecay: 0.05,
+        octaves: 4,
+        envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
+      }).connect(reverb)
     case 'bass':
       return new Tone.PolySynth(Tone.MonoSynth, {
         oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.01, decay: 0.3, sustain: 0.4, release: 0.8 },
-        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.8, baseFrequency: 200, octaves: 3 },
-      }).toDestination()
+        envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 0.8 },
+        filterEnvelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.8, baseFrequency: 200, octaves: 2 },
+      }).connect(reverb)
     case 'synth':
       return new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 0.4 },
-      }).toDestination()
+        oscillator: { type: 'fatsawtooth', spread: 20, count: 3 },
+        envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.5 },
+      }).connect(reverb)
     case 'piano':
       return new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.005, decay: 0.3, sustain: 0.1, release: 1.2 },
-      }).toDestination()
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.01, decay: 0.5, sustain: 0.2, release: 1.5 },
+      }).connect(reverb)
     case 'pad':
       return new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.5, decay: 0.5, sustain: 0.8, release: 2 },
-      }).toDestination()
+        envelope: { attack: 0.8, decay: 0.5, sustain: 0.9, release: 3 },
+      }).connect(reverb)
     case 'lead':
       return new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'square' },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.3 },
-      }).toDestination()
+        envelope: { attack: 0.02, decay: 0.1, sustain: 0.6, release: 0.4 },
+      }).connect(reverb)
     default:
-      return new Tone.PolySynth(Tone.Synth).toDestination()
+      return new Tone.PolySynth(Tone.Synth).connect(reverb)
   }
 }
 
@@ -84,15 +90,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
-  const pitchDetectorRef = useRef<ReturnType<typeof PitchFinder.YIN> | null>(null)
+  const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
+  const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
+  const pitchDetectorRef = useRef<ReturnType<typeof PitchFinder.Macleod> | null>(null)
   const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth>>(new Map())
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
-  const pitchHistoryRef = useRef<number[]>([])
-  const stablePitchCountRef = useRef<number>(0)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
 
@@ -103,23 +109,36 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
-          noiseSuppression: false,
+          noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 44100,
         },
       })
       mediaStreamRef.current = stream
 
-      audioContextRef.current = new AudioContext({ sampleRate: 44100 })
+      audioContextRef.current = new AudioContext()
       const source = audioContextRef.current.createMediaStreamSource(stream)
+      
+      highPassFilterRef.current = audioContextRef.current.createBiquadFilter()
+      highPassFilterRef.current.type = 'highpass'
+      highPassFilterRef.current.frequency.value = 80
+      highPassFilterRef.current.Q.value = 0.7
+      
+      lowPassFilterRef.current = audioContextRef.current.createBiquadFilter()
+      lowPassFilterRef.current.type = 'lowpass'
+      lowPassFilterRef.current.frequency.value = 1200
+      lowPassFilterRef.current.Q.value = 0.7
+      
       analyserRef.current = audioContextRef.current.createAnalyser()
-      analyserRef.current.fftSize = 4096
-      analyserRef.current.smoothingTimeConstant = 0.8
-      source.connect(analyserRef.current)
+      analyserRef.current.fftSize = 2048
+      analyserRef.current.smoothingTimeConstant = 0.5
+      
+      source.connect(highPassFilterRef.current)
+      highPassFilterRef.current.connect(lowPassFilterRef.current)
+      lowPassFilterRef.current.connect(analyserRef.current)
 
-      pitchDetectorRef.current = PitchFinder.YIN({
+      pitchDetectorRef.current = PitchFinder.Macleod({
         sampleRate: audioContextRef.current.sampleRate,
-        threshold: 0.1,
+        cutoff: 0.9,
       })
 
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
@@ -147,23 +166,27 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     analyserRef.current.getFloatTimeDomainData(buffer)
 
     let rms = 0
+    let maxAmplitude = 0
     for (let i = 0; i < buffer.length; i++) {
+      const abs = Math.abs(buffer[i])
       rms += buffer[i] * buffer[i]
+      if (abs > maxAmplitude) maxAmplitude = abs
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.001
+    const minVolume = 0.008
     if (rms < minVolume) {
       setCurrentPitch(null)
       return null
     }
 
-    const frequency = pitchDetectorRef.current(buffer)
+    const pitchResult = pitchDetectorRef.current(buffer)
 
-    if (frequency && frequency > 50 && frequency < 2000) {
+    if (pitchResult && pitchResult.freq > 70 && pitchResult.freq < 1000 && pitchResult.probability > 0.9) {
+      const frequency = pitchResult.freq
       const midiNote = frequencyToMidi(frequency)
       const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 20, 1)
+      const clarity = Math.min(rms * 12, 1)
 
       const result: PitchDetectionResult = {
         frequency,
@@ -176,13 +199,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return result
     }
 
-    pitchHistoryRef.current = []
-    stablePitchCountRef.current = 0
     setCurrentPitch(null)
     return null
   }, [])
 
-  const triggerNote = useCallback((midiNote: number, duration: number = 0.2) => {
+  const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)
     if (instrument) {
       const noteName = midiToNoteName(midiNote)
@@ -207,7 +228,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.005) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.03) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {

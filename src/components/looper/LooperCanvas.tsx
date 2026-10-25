@@ -41,6 +41,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     setTempo,
     cycleInstrument,
     setCurrentInstrument,
+    toggleMetronome,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
 
   const handleSave = () => {
@@ -243,6 +244,39 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         onCycle={cycleInstrument}
       />
 
+      <div className="flex items-center gap-3 mb-4">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={toggleMetronome}
+          disabled={!state.isInitialized}
+          className={`p-3 rounded-full transition-all ${
+            state.metronomeEnabled
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30'
+              : 'bg-gray-800/80 text-gray-400 hover:bg-gray-700/80'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+          title="Metronom"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        </motion.button>
+        {state.metronomeEnabled && (
+          <motion.span
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="text-sm text-amber-400"
+          >
+            {state.tempo} BPM
+          </motion.span>
+        )}
+      </div>
+
       <TransportControls
         isPlaying={state.isPlaying}
         tempo={state.tempo}
@@ -271,13 +305,14 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         {state.isInitialized ? (
           state.isRecording ? (
             <>
-              <span className="text-red-500">●</span> Recording... (playback paused)
+              <span className="text-red-500">●</span> Recording...
+              {state.metronomeEnabled && ' • Metronom aktiv'}
             </>
           ) : (
             <>
               <span className="text-green-500">●</span> Audio ready •{' '}
               {loops.length} {loops.length === 1 ? 'loop' : 'loops'}
-              {loops.length > 0 && ' • Use headphones for overdub'}
+              {state.metronomeEnabled && ' • Metronom aktiv'}
             </>
           )
         ) : (

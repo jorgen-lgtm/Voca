@@ -26,15 +26,14 @@ function midiToNoteName(midi: number): string {
   return `${note}${octave}`
 }
 
-function createInstrument(type: InstrumentType): Tone.PolySynth | Tone.MembraneSynth {
-  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).toDestination()
+function createInstrument(type: InstrumentType, masterVolume: Tone.Volume): Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth {
+  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
   
   switch (type) {
     case 'drums':
-      return new Tone.MembraneSynth({
-        pitchDecay: 0.05,
-        octaves: 4,
-        envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
+      return new Tone.NoiseSynth({
+        noise: { type: 'white' },
+        envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.1 },
       }).connect(reverb)
     case 'bass':
       return new Tone.PolySynth(Tone.MonoSynth, {
@@ -74,13 +73,14 @@ interface UseAudioEngineProps {
 }
 
 export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }: UseAudioEngineProps = {}) {
-  const [state, setState] = useState<AudioEngineState>({
+  const [state, setState] = useState<AudioEngineState & { metronomeEnabled: boolean }>({
     isInitialized: false,
     isRecording: false,
     isPlaying: false,
     currentBeat: 0,
     tempo,
     loopLength: loopBars * 4,
+    metronomeEnabled: false,
   })
 
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
@@ -93,9 +93,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lowPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const highPassFilterRef = useRef<BiquadFilterNode | null>(null)
   const aiReadyRef = useRef<boolean>(false)
-  const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth>>(new Map())
+  const instrumentsRef = useRef<Map<InstrumentType, Tone.PolySynth | Tone.MembraneSynth | Tone.NoiseSynth>>(new Map())
+  const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
+  const lastDrumHitTimeRef = useRef<number>(0)
+  const prevRmsRef = useRef<number>(0)
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
@@ -104,6 +107,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const wasPlayingBeforeRecordRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
+  const metronomeSynthRef = useRef<Tone.Synth | null>(null)
+  const metronomeLoopRef = useRef<Tone.Loop | null>(null)
+  const metronomeEnabledRef = useRef<boolean>(false)
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -148,9 +154,17 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       console.log('TensorFlow.js ready:', tf.getBackend())
       aiReadyRef.current = true
 
+      masterVolumeRef.current = new Tone.Volume(0).toDestination()
+
+      metronomeSynthRef.current = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+      }).toDestination()
+      metronomeSynthRef.current.volume.value = -6
+
       const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
       instruments.forEach((type) => {
-        instrumentsRef.current.set(type, createInstrument(type))
+        instrumentsRef.current.set(type, createInstrument(type, masterVolumeRef.current!))
       })
 
       Tone.getTransport().bpm.value = tempo
@@ -242,61 +256,123 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)
     if (instrument) {
-      const noteName = midiToNoteName(midiNote)
-      if ('triggerAttackRelease' in instrument) {
-        instrument.triggerAttackRelease(noteName, duration)
+      if (currentInstrument === 'drums' && instrument instanceof Tone.NoiseSynth) {
+        instrument.triggerAttackRelease('8n')
+      } else if ('triggerAttackRelease' in instrument) {
+        const noteName = midiToNoteName(midiNote)
+        ;(instrument as Tone.PolySynth).triggerAttackRelease(noteName, duration)
       }
     }
   }, [currentInstrument])
+
+  const detectDrumHit = useCallback((): boolean => {
+    if (!analyserRef.current || !audioContextRef.current) {
+      return false
+    }
+
+    const bufferLength = analyserRef.current.fftSize
+    const buffer = new Float32Array(bufferLength)
+    analyserRef.current.getFloatTimeDomainData(buffer)
+
+    let rms = 0
+    for (let i = 0; i < buffer.length; i++) {
+      rms += buffer[i] * buffer[i]
+    }
+    rms = Math.sqrt(rms / buffer.length)
+
+    const prevRms = prevRmsRef.current
+    prevRmsRef.current = rms
+
+    const currentTime = Tone.now()
+    const timeSinceLastHit = currentTime - lastDrumHitTimeRef.current
+    const minTimeBetweenHits = 0.08
+
+    if (timeSinceLastHit < minTimeBetweenHits) {
+      return false
+    }
+
+    const volumeThreshold = 0.05
+    const spikeRatio = 2.0
+
+    if (rms > volumeThreshold && rms > prevRms * spikeRatio) {
+      lastDrumHitTimeRef.current = currentTime
+      return true
+    }
+
+    return false
+  }, [])
+
+  const triggerDrumHit = useCallback(() => {
+    const instrument = instrumentsRef.current.get('drums')
+    if (instrument && instrument instanceof Tone.NoiseSynth) {
+      instrument.triggerAttackRelease('8n')
+    }
+  }, [])
 
   const startRecording = useCallback(() => {
     if (!state.isInitialized) return
 
     wasPlayingBeforeRecordRef.current = state.isPlaying
-    if (state.isPlaying) {
-      const transport = Tone.getTransport()
-      transport.pause()
+    
+    if (masterVolumeRef.current) {
+      masterVolumeRef.current.volume.rampTo(-14, 0.1)
     }
 
     recordingNotesRef.current = []
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
+    lastDrumHitTimeRef.current = 0
+    prevRmsRef.current = 0
     isRecordingRef.current = true
 
-    setState((prev) => ({ ...prev, isRecording: true, isPlaying: false }))
+    setState((prev) => ({ ...prev, isRecording: true }))
 
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
 
-      const pitch = detectPitch()
-
-      if (pitch && pitch.midiNote && pitch.clarity > 0.1) {
-        const currentTime = Tone.now() - recordingStartTimeRef.current
-
-        if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {
-          if (lastNoteRef.current) {
-            const duration = currentTime - lastNoteRef.current.startTime
-            recordingNotesRef.current.push({
-              pitch: lastNoteRef.current.midi,
-              velocity: 100,
-              startTime: lastNoteRef.current.startTime,
-              duration: Math.max(duration, 0.1),
-            })
-          }
-
-          lastNoteRef.current = { midi: pitch.midiNote, startTime: currentTime }
-          triggerNote(pitch.midiNote)
+      if (currentInstrument === 'drums') {
+        const isHit = detectDrumHit()
+        if (isHit) {
+          const currentTime = Tone.now() - recordingStartTimeRef.current
+          recordingNotesRef.current.push({
+            pitch: 36,
+            velocity: 100,
+            startTime: currentTime,
+            duration: 0.1,
+          })
+          triggerDrumHit()
         }
-      } else if (lastNoteRef.current) {
-        const currentTime = Tone.now() - recordingStartTimeRef.current
-        const duration = currentTime - lastNoteRef.current.startTime
-        recordingNotesRef.current.push({
-          pitch: lastNoteRef.current.midi,
-          velocity: 100,
-          startTime: lastNoteRef.current.startTime,
-          duration: Math.max(duration, 0.1),
-        })
-        lastNoteRef.current = null
+      } else {
+        const pitch = detectPitch()
+
+        if (pitch && pitch.midiNote && pitch.clarity > 0.1) {
+          const currentTime = Tone.now() - recordingStartTimeRef.current
+
+          if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {
+            if (lastNoteRef.current) {
+              const duration = currentTime - lastNoteRef.current.startTime
+              recordingNotesRef.current.push({
+                pitch: lastNoteRef.current.midi,
+                velocity: 100,
+                startTime: lastNoteRef.current.startTime,
+                duration: Math.max(duration, 0.1),
+              })
+            }
+
+            lastNoteRef.current = { midi: pitch.midiNote, startTime: currentTime }
+            triggerNote(pitch.midiNote)
+          }
+        } else if (lastNoteRef.current) {
+          const currentTime = Tone.now() - recordingStartTimeRef.current
+          const duration = currentTime - lastNoteRef.current.startTime
+          recordingNotesRef.current.push({
+            pitch: lastNoteRef.current.midi,
+            velocity: 100,
+            startTime: lastNoteRef.current.startTime,
+            duration: Math.max(duration, 0.1),
+          })
+          lastNoteRef.current = null
+        }
       }
 
       if (isRecordingRef.current) {
@@ -305,13 +381,17 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     analyzeLoop()
-  }, [state.isInitialized, detectPitch, triggerNote])
+  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, detectDrumHit, triggerNote, triggerDrumHit])
 
   const stopRecording = useCallback((): RecordedLoop | null => {
     if (!isRecordingRef.current) return null
 
     isRecordingRef.current = false
     setState((prev) => ({ ...prev, isRecording: false }))
+
+    if (masterVolumeRef.current) {
+      masterVolumeRef.current.volume.rampTo(0, 0.1)
+    }
 
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
@@ -331,11 +411,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const recordingDuration = Tone.now() - recordingStartTimeRef.current
 
     if (recordingNotesRef.current.length === 0) {
-      if (wasPlayingBeforeRecordRef.current) {
-        const transport = Tone.getTransport()
-        transport.start()
-        setState((prev) => ({ ...prev, isPlaying: true }))
-      }
       return null
     }
 
@@ -386,8 +461,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
       const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
-      if (instrument && 'triggerAttackRelease' in instrument) {
-        instrument.triggerAttackRelease(event.note, event.duration, time)
+      if (instrument) {
+        if (event.instrument === 'drums' && instrument instanceof Tone.NoiseSynth) {
+          instrument.triggerAttackRelease('8n', time)
+        } else if ('triggerAttackRelease' in instrument) {
+          ;(instrument as Tone.PolySynth).triggerAttackRelease(event.note, event.duration, time)
+        }
       }
     }, partEvents.map((e) => [e.time, e]))
 
@@ -449,6 +528,44 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     setCurrentInstrument(instruments[newIndex])
   }, [currentInstrument])
 
+  const toggleMetronome = useCallback(() => {
+    const newEnabled = !metronomeEnabledRef.current
+    metronomeEnabledRef.current = newEnabled
+    setState((prev) => ({ ...prev, metronomeEnabled: newEnabled }))
+
+    if (newEnabled) {
+      if (metronomeLoopRef.current) {
+        metronomeLoopRef.current.dispose()
+      }
+
+      let beatCount = 0
+      metronomeLoopRef.current = new Tone.Loop((time) => {
+        if (metronomeSynthRef.current && metronomeEnabledRef.current) {
+          const isDownbeat = beatCount % 4 === 0
+          const note = isDownbeat ? 'C6' : 'G5'
+          metronomeSynthRef.current.triggerAttackRelease(note, '32n', time)
+        }
+        beatCount++
+      }, '4n')
+
+      metronomeLoopRef.current.start(0)
+
+      if (!state.isPlaying && !state.isRecording) {
+        Tone.getTransport().start()
+      }
+    } else {
+      if (metronomeLoopRef.current) {
+        metronomeLoopRef.current.stop()
+        metronomeLoopRef.current.dispose()
+        metronomeLoopRef.current = null
+      }
+
+      if (!state.isPlaying && !state.isRecording) {
+        Tone.getTransport().stop()
+      }
+    }
+  }, [state.isPlaying, state.isRecording])
+
   useEffect(() => {
     const transport = Tone.getTransport()
     
@@ -485,6 +602,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       if (loopPartRef.current) {
         loopPartRef.current.dispose()
       }
+      if (masterVolumeRef.current) {
+        masterVolumeRef.current.dispose()
+      }
+      if (metronomeSynthRef.current) {
+        metronomeSynthRef.current.dispose()
+      }
+      if (metronomeLoopRef.current) {
+        metronomeLoopRef.current.dispose()
+      }
     }
   }, [])
 
@@ -505,6 +631,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     cycleInstrument,
     setCurrentInstrument,
     triggerNote,
+    toggleMetronome,
   }
 }
 

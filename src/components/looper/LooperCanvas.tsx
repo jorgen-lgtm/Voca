@@ -35,6 +35,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     lastDrumType,
     loops,
     currentInstrument,
+    loadingInstruments,
     initializeAudio,
     startRecording,
     stopRecording,
@@ -280,6 +281,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           currentInstrument={currentInstrument}
           onSelect={setCurrentInstrument}
           onCycle={cycleInstrument}
+          loadingInstruments={loadingInstruments}
         />
       )}
 

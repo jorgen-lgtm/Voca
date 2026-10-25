@@ -3,7 +3,7 @@
 import { motion, useAnimation, PanInfo } from 'framer-motion'
 import { useEffect, useRef } from 'react'
 import type { RecordedLoop } from '@/types/audio'
-import type { InstrumentType } from '@/types/database'
+import { getInstrumentConfig } from '@/config/instruments'
 
 interface LoopRingProps {
   loop: RecordedLoop
@@ -13,15 +13,6 @@ interface LoopRingProps {
   isSelected: boolean
   onSelect: () => void
   onDelete: () => void
-}
-
-const INSTRUMENT_ICONS: Record<InstrumentType, string> = {
-  drums: '🥁',
-  bass: '🎸',
-  synth: '🎹',
-  piano: '🎼',
-  pad: '🌊',
-  lead: '🎺',
 }
 
 export function LoopRing({
@@ -156,7 +147,7 @@ export function LoopRing({
           repeat: isPlaying ? Infinity : 0,
         }}
       >
-        {INSTRUMENT_ICONS[loop.instrumentType]}
+        {getInstrumentConfig(loop.instrumentType).icon}
       </motion.div>
     </motion.div>
   )

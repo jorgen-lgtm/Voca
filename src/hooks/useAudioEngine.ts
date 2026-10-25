@@ -5,15 +5,7 @@ import * as Tone from 'tone'
 import * as Pitchfinder from 'pitchfinder'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
-
-const INSTRUMENT_COLORS: Record<InstrumentType, string> = {
-  drums: '#ef4444',
-  bass: '#f97316',
-  synth: '#8b5cf6',
-  piano: '#3b82f6',
-  pad: '#10b981',
-  lead: '#ec4899',
-}
+import { SOUNDFONT_BASE_URL, INSTRUMENT_MAP, DRUM_SAMPLES, getInstrumentConfig } from '@/config/instruments'
 
 function frequencyToMidi(frequency: number): number {
   return Math.round(12 * Math.log2(frequency / 440) + 69)
@@ -26,126 +18,105 @@ function midiToNoteName(midi: number): string {
   return `${note}${octave}`
 }
 
-type DrumKit = {
-  kick: Tone.MembraneSynth
-  snare: Tone.NoiseSynth
-  hihat: Tone.MetalSynth
+type DrumSampler = {
+  sampler: Tone.Sampler
+  loaded: boolean
 }
 
-function createDrumKit(masterVolume: Tone.Volume): DrumKit {
-  const kickReverb = new Tone.Reverb({ decay: 0.5, wet: 0.2 }).connect(masterVolume)
-  const snareReverb = new Tone.Reverb({ decay: 0.3, wet: 0.15 }).connect(masterVolume)
-  const hihatReverb = new Tone.Reverb({ decay: 0.1, wet: 0.1 }).connect(masterVolume)
-
-  const kick = new Tone.MembraneSynth({
-    pitchDecay: 0.05,
-    octaves: 6,
-    envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.5 },
-  }).connect(kickReverb)
-  kick.volume.value = -6
-
-  const snare = new Tone.NoiseSynth({
-    noise: { type: 'white' },
-    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.15 },
-  }).connect(snareReverb)
-  snare.volume.value = -10
-
-  const hihat = new Tone.MetalSynth({
-    envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 },
-    harmonicity: 5.1,
-    modulationIndex: 32,
-    resonance: 4000,
-    octaves: 1.5,
-  }).connect(hihatReverb)
-  hihat.volume.value = -15
-
-  return { kick, snare, hihat }
-}
-
-const SOUNDFONT_URL = 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite'
-
-const INSTRUMENT_SOUNDFONTS: Record<InstrumentType, string> = {
-  drums: 'synth_drum',
-  bass: 'acoustic_bass',
-  synth: 'synth_brass_1',
-  piano: 'acoustic_grand_piano',
-  pad: 'pad_2_warm',
-  lead: 'lead_1_square',
-}
-
-async function createSampledInstrument(
-  type: InstrumentType, 
-  masterVolume: Tone.Volume
-): Promise<Tone.Sampler | null> {
-  if (type === 'drums') {
-    return null
-  }
-
-  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
-  const soundfontName = INSTRUMENT_SOUNDFONTS[type]
+async function createDrumSampler(masterVolume: Tone.Volume): Promise<DrumSampler> {
+  const reverb = new Tone.Reverb({ decay: 0.8, wet: 0.15 }).connect(masterVolume)
+  const compressor = new Tone.Compressor(-20, 4).connect(reverb)
   
-  const notes = ['C2', 'C3', 'C4', 'C5', 'C6']
   const urls: Record<string, string> = {}
   
-  notes.forEach(note => {
+  Object.entries(DRUM_SAMPLES).forEach(([name, config]) => {
+    const noteName = midiToNoteName(config.midiNote)
+    urls[noteName] = config.url
+  })
+
+  return new Promise((resolve) => {
+    const sampler = new Tone.Sampler({
+      urls,
+      onload: () => {
+        console.log('Drum sampler loaded')
+        resolve({ sampler, loaded: true })
+      },
+      onerror: (err) => {
+        console.warn('Failed to load drum samples:', err)
+        resolve({ sampler, loaded: false })
+      }
+    }).connect(compressor)
+  })
+}
+
+async function createInstrumentSampler(
+  type: InstrumentType, 
+  masterVolume: Tone.Volume
+): Promise<Tone.Sampler> {
+  if (type === 'drums') {
+    const drumSampler = await createDrumSampler(masterVolume)
+    return drumSampler.sampler
+  }
+
+  const config = getInstrumentConfig(type)
+  const reverb = new Tone.Reverb({ decay: 1.8, wet: 0.25 }).connect(masterVolume)
+  const compressor = new Tone.Compressor(-15, 3).connect(reverb)
+  
+  const notesToLoad = ['C2', 'E2', 'G2', 'C3', 'E3', 'G3', 'C4', 'E4', 'G4', 'C5', 'E5', 'G5', 'C6']
+  const urls: Record<string, string> = {}
+  
+  notesToLoad.forEach(note => {
     const noteForUrl = note.replace('#', 's')
-    urls[note] = `${SOUNDFONT_URL}/${soundfontName}-mp3/${noteForUrl}.mp3`
+    urls[note] = `${SOUNDFONT_BASE_URL}/${config.soundfont}-mp3/${noteForUrl}.mp3`
   })
 
   return new Promise((resolve) => {
     const sampler = new Tone.Sampler({
       urls,
       baseUrl: '',
+      release: type === 'guitar' ? 1.5 : 1,
       onload: () => {
-        console.log(`Loaded samples for ${type}`)
+        console.log(`Loaded ${type} sampler`)
         resolve(sampler)
       },
       onerror: (err) => {
-        console.warn(`Failed to load samples for ${type}, using fallback:`, err)
-        resolve(createFallbackSynth(type, masterVolume))
+        console.warn(`Failed to load ${type} samples:`, err)
+        resolve(createFallbackSynth(type, compressor))
       }
-    }).connect(reverb)
+    }).connect(compressor)
   })
 }
 
-function createFallbackSynth(type: InstrumentType, masterVolume: Tone.Volume): Tone.Sampler {
-  const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).connect(masterVolume)
-  
-  const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+function createFallbackSynth(type: InstrumentType, output: Tone.ToneAudioNode): Tone.Sampler {
+  const synth = new Tone.PolySynth(Tone.Synth).connect(output)
   
   switch (type) {
     case 'bass':
-      synth.set({
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 0.8 },
-      })
+      synth.set({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.02, decay: 0.3, sustain: 0.4, release: 0.8 } })
       break
     case 'piano':
-      synth.set({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.01, decay: 0.8, sustain: 0.1, release: 1.5 },
-      })
+      synth.set({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.8, sustain: 0.1, release: 1.5 } })
       break
-    case 'pad':
-      synth.set({
-        oscillator: { type: 'sine' },
-        envelope: { attack: 0.8, decay: 0.5, sustain: 0.9, release: 3 },
-      })
+    case 'guitar':
+      synth.set({ oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.5, sustain: 0.2, release: 1.2 } })
       break
-    case 'lead':
-      synth.set({
-        oscillator: { type: 'square' },
-        envelope: { attack: 0.02, decay: 0.1, sustain: 0.6, release: 0.4 },
-      })
+    case 'strings':
+      synth.set({ oscillator: { type: 'sine' }, envelope: { attack: 0.4, decay: 0.3, sustain: 0.8, release: 2 } })
+      break
+    case 'brass':
+      synth.set({ oscillator: { type: 'square' }, envelope: { attack: 0.05, decay: 0.1, sustain: 0.7, release: 0.4 } })
+      break
+    case 'organ':
+      synth.set({ oscillator: { type: 'sine' }, envelope: { attack: 0.02, decay: 0.1, sustain: 0.9, release: 0.3 } })
+      break
+    case 'drums':
+      synth.set({ oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.2 } })
       break
     case 'synth':
     default:
-      synth.set({
-        oscillator: { type: 'fatsawtooth' },
-        envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.5 },
-      })
+      synth.set({ oscillator: { type: 'fatsawtooth' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.5 } })
   }
-  
+
   return synth as unknown as Tone.Sampler
 }
 
@@ -171,14 +142,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
-  const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('synth')
+  const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
+  const [loadingInstruments, setLoadingInstruments] = useState<Set<InstrumentType>>(new Set())
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const pitchDetectorRef = useRef<((buffer: Float32Array) => number | null) | null>(null)
-  const instrumentsRef = useRef<Map<InstrumentType, Tone.Sampler | Tone.PolySynth | null>>(new Map())
-  const drumKitRef = useRef<DrumKit | null>(null)
+  const instrumentsRef = useRef<Map<InstrumentType, Tone.Sampler>>(new Map())
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
   const recordingStartTimeRef = useRef<number>(0)
@@ -194,6 +165,25 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const metronomeLoopRef = useRef<Tone.Loop | null>(null)
   const metronomeEnabledRef = useRef<boolean>(false)
   const metronomeAudibleRef = useRef<boolean>(false)
+
+  const loadInstrument = useCallback(async (type: InstrumentType) => {
+    if (instrumentsRef.current.has(type) || !masterVolumeRef.current) return
+
+    setLoadingInstruments(prev => new Set(prev).add(type))
+    
+    try {
+      const sampler = await createInstrumentSampler(type, masterVolumeRef.current)
+      instrumentsRef.current.set(type, sampler)
+    } catch (err) {
+      console.error(`Failed to load instrument ${type}:`, err)
+    }
+    
+    setLoadingInstruments(prev => {
+      const next = new Set(prev)
+      next.delete(type)
+      return next
+    })
+  }, [])
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -227,13 +217,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
-      // Analyser for pitch detection
       analyserRef.current = audioContextRef.current.createAnalyser()
       analyserRef.current.fftSize = 2048
       analyserRef.current.smoothingTimeConstant = 0.1
       source.connect(analyserRef.current)
       
-      // Initialize pitch detector using YIN algorithm
       const sampleRate = audioContextRef.current.sampleRate
       console.log('Creating YIN pitch detector with sample rate:', sampleRate)
       
@@ -253,17 +241,19 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       }).toDestination()
       metronomeSynthRef.current.volume.value = -12
 
-      drumKitRef.current = createDrumKit(masterVolumeRef.current)
-
-      const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
+      const coreInstruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar']
       
-      const loadPromises = instruments.map(async (type) => {
-        const instrument = await createSampledInstrument(type, masterVolumeRef.current!)
+      setLoadingInstruments(new Set(coreInstruments))
+      
+      const loadPromises = coreInstruments.map(async (type) => {
+        const instrument = await createInstrumentSampler(type, masterVolumeRef.current!)
         instrumentsRef.current.set(type, instrument)
       })
       
       await Promise.all(loadPromises)
-      console.log('All instruments loaded')
+      console.log('Core instruments loaded')
+      
+      setLoadingInstruments(new Set())
 
       Tone.getTransport().bpm.value = tempo
 
@@ -288,11 +278,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
   const detectPitch = useCallback(() => {
     if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
-      console.log('Missing refs:', { 
-        analyser: !!analyserRef.current, 
-        audioCtx: !!audioContextRef.current, 
-        pitchDetector: !!pitchDetectorRef.current 
-      })
       return null
     }
 
@@ -300,7 +285,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const buffer = new Float32Array(bufferLength)
     analyserRef.current.getFloatTimeDomainData(buffer)
 
-    // Check volume level
     let rms = 0
     let maxVal = 0
     for (let i = 0; i < buffer.length; i++) {
@@ -317,16 +301,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return null
     }
 
-    // Use YIN algorithm for pitch detection
     const frequency = pitchDetectorRef.current(buffer)
-    
-    // Debug logging - show audio levels
-    console.log(`Audio: RMS=${rms.toFixed(4)}, Max=${maxVal.toFixed(4)}, Freq=${frequency?.toFixed(1) || 'null'}`)
 
     if (frequency && frequency > 65 && frequency < 1000) {
       const midiNote = frequencyToMidi(frequency)
       
-      // Require 2 stable readings (faster than before)
       if (lastDetectedPitchRef.current === midiNote) {
         pitchStabilityCountRef.current++
       } else {
@@ -373,31 +352,22 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [currentInstrument])
 
   const triggerDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
-    if (!drumKitRef.current) return
+    const drumSampler = instrumentsRef.current.get('drums')
+    if (!drumSampler) return
 
-    switch (drumType) {
-      case 'kick':
-        drumKitRef.current.kick.triggerAttackRelease('C1', '8n')
-        break
-      case 'snare':
-        drumKitRef.current.snare.triggerAttackRelease('8n')
-        break
-      case 'hihat':
-        drumKitRef.current.hihat.triggerAttackRelease('C4', '32n')
-        break
-    }
+    const drumConfig = DRUM_SAMPLES[drumType]
+    const noteName = midiToNoteName(drumConfig.midiNote)
+    drumSampler.triggerAttackRelease(noteName, '8n')
   }, [])
 
-  // Manual drum hit recording - called when user taps drum buttons
   const recordDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat') => {
     if (!isRecordingRef.current) return
     
     const currentTime = Tone.now() - recordingStartTimeRef.current
-    const drumMidiMap = { kick: 36, snare: 38, hihat: 42 }
-    const midiNote = drumMidiMap[drumType]
+    const drumConfig = DRUM_SAMPLES[drumType]
     
     recordingNotesRef.current.push({
-      pitch: midiNote,
+      pitch: drumConfig.midiNote,
       velocity: 100,
       startTime: currentTime,
       duration: 0.1,
@@ -423,7 +393,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     lastNoteRef.current = null
     isRecordingRef.current = true
 
-    // Ensure transport is running for metronome during recording
     const transport = Tone.getTransport()
     if (transport.state !== 'started' && metronomeEnabledRef.current) {
       transport.start()
@@ -434,8 +403,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const analyzeLoop = () => {
       if (!isRecordingRef.current) return
 
-      // For drums, we use manual button input (recordDrumHit)
-      // Only do pitch detection for melodic instruments
       if (currentInstrument !== 'drums') {
         const pitch = detectPitch()
 
@@ -508,12 +475,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       return null
     }
 
+    const config = getInstrumentConfig(currentInstrument)
+    
     const newLoop: RecordedLoop = {
       id: crypto.randomUUID(),
       instrumentType: currentInstrument,
       notes: [...recordingNotesRef.current],
       duration: recordingDuration,
-      color: INSTRUMENT_COLORS[currentInstrument],
+      color: config.color,
       volume: 1,
     }
 
@@ -561,40 +530,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     loopPartRef.current = new Tone.Part((time: number, event: any) => {
       const velocity = event.volume ?? 1
       
-      // Skip muted tracks (volume = 0)
       if (velocity <= 0) {
         return
       }
       
-      if (event.instrument === 'drums' && drumKitRef.current) {
-        const midiToDrum: Record<number, 'kick' | 'snare' | 'hihat'> = {
-          36: 'kick',
-          38: 'snare',
-          42: 'hihat',
-        }
-        const drumType = midiToDrum[event.midiNote] || 'snare'
-        
-        const currentVolume = drumKitRef.current[drumType].volume.value
-        drumKitRef.current[drumType].volume.value = currentVolume + (20 * Math.log10(velocity))
-        
-        switch (drumType) {
-          case 'kick':
-            drumKitRef.current.kick.triggerAttackRelease('C1', '8n', time)
-            break
-          case 'snare':
-            drumKitRef.current.snare.triggerAttackRelease('8n', time)
-            break
-          case 'hihat':
-            drumKitRef.current.hihat.triggerAttackRelease('C4', '32n', time)
-            break
-        }
-        
-        drumKitRef.current[drumType].volume.value = currentVolume
-      } else {
-        const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
-        if (instrument && 'triggerAttackRelease' in instrument) {
-          instrument.triggerAttackRelease(event.note, event.duration, time, velocity)
-        }
+      const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
+      if (instrument && 'triggerAttackRelease' in instrument) {
+        instrument.triggerAttackRelease(event.note, event.duration, time, velocity)
       }
     }, partEvents.map((e) => [e.time, e]))
 
@@ -641,7 +583,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const transposeLoop = useCallback((loopId: string, semitones: number) => {
     setLoops((prev) => prev.map((loop) => {
       if (loop.id !== loopId) return loop
-      // Don't transpose drums
       if (loop.instrumentType === 'drums') return loop
       
       return {
@@ -668,8 +609,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     setState((prev) => ({ ...prev, tempo: newTempo }))
   }, [])
 
+  const handleSetInstrument = useCallback(async (type: InstrumentType) => {
+    setCurrentInstrument(type)
+    if (!instrumentsRef.current.has(type) && masterVolumeRef.current) {
+      await loadInstrument(type)
+    }
+  }, [loadInstrument])
+
   const cycleInstrument = useCallback((direction: 'next' | 'prev') => {
-    const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
+    const instruments: InstrumentType[] = ['drums', 'bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ']
     const currentIndex = instruments.indexOf(currentInstrument)
     let newIndex: number
 
@@ -679,8 +627,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       newIndex = (currentIndex - 1 + instruments.length) % instruments.length
     }
 
-    setCurrentInstrument(instruments[newIndex])
-  }, [currentInstrument])
+    handleSetInstrument(instruments[newIndex])
+  }, [currentInstrument, handleSetInstrument])
 
   const toggleMetronome = useCallback(() => {
     const newEnabled = !metronomeEnabledRef.current
@@ -769,11 +717,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         cancelAnimationFrame(animationFrameRef.current)
       }
       instrumentsRef.current.forEach((instrument) => instrument?.dispose())
-      if (drumKitRef.current) {
-        drumKitRef.current.kick.dispose()
-        drumKitRef.current.snare.dispose()
-        drumKitRef.current.hihat.dispose()
-      }
       if (loopPartRef.current) {
         loopPartRef.current.dispose()
       }
@@ -795,6 +738,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     lastDrumType,
     loops,
     currentInstrument,
+    loadingInstruments,
     initializeAudio,
     startRecording,
     stopRecording,
@@ -805,7 +749,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     clearAllLoops,
     setTempo,
     cycleInstrument,
-    setCurrentInstrument,
+    setCurrentInstrument: handleSetInstrument,
     triggerNote,
     triggerDrumHit,
     recordDrumHit,
@@ -816,4 +760,3 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     updateLoops,
   }
 }
-

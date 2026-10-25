@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion'
 import type { RecordedLoop } from '@/types/audio'
-import type { InstrumentType } from '@/types/database'
+import { getInstrumentConfig } from '@/config/instruments'
 
 interface LoopEditorProps {
   loop: RecordedLoop
@@ -11,24 +11,6 @@ interface LoopEditorProps {
   onTranspose: (semitones: number) => void
   onDelete: () => void
   onClose: () => void
-}
-
-const INSTRUMENT_ICONS: Record<InstrumentType, string> = {
-  drums: '🥁',
-  bass: '🎸',
-  synth: '🎹',
-  piano: '🎼',
-  pad: '🌊',
-  lead: '🎺',
-}
-
-const INSTRUMENT_NAMES: Record<InstrumentType, string> = {
-  drums: 'Trummor',
-  bass: 'Bas',
-  synth: 'Synth',
-  piano: 'Piano',
-  pad: 'Pad',
-  lead: 'Lead',
 }
 
 export function LoopEditor({
@@ -51,9 +33,9 @@ export function LoopEditor({
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{INSTRUMENT_ICONS[loop.instrumentType]}</span>
+          <span className="text-2xl">{getInstrumentConfig(loop.instrumentType).icon}</span>
           <div>
-            <div className="font-medium text-white">{INSTRUMENT_NAMES[loop.instrumentType]}</div>
+            <div className="font-medium text-white">{getInstrumentConfig(loop.instrumentType).name}</div>
             <div className="text-xs text-gray-400">{loop.notes.length} noter</div>
           </div>
         </div>

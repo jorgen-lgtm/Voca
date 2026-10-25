@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { MidiData, InstrumentType } from '@/types/database'
 import type { RecordedLoop } from '@/types/audio'
+import { getInstrumentConfig } from '@/config/instruments'
 
 interface Project {
   id: string
@@ -215,13 +216,5 @@ export function useProjects() {
 }
 
 function getInstrumentColor(type: InstrumentType): string {
-  const colors: Record<InstrumentType, string> = {
-    drums: '#ef4444',
-    bass: '#f97316',
-    synth: '#8b5cf6',
-    piano: '#3b82f6',
-    pad: '#10b981',
-    lead: '#ec4899',
-  }
-  return colors[type]
+  return getInstrumentConfig(type).color
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RecordButton } from './RecordButton'
 import { LoopRing } from './LoopRing'
+import { LoopEditor } from './LoopEditor'
 import { InstrumentSelector } from './InstrumentSelector'
 import { TransportControls } from './TransportControls'
 import { PitchDisplay } from './PitchDisplay'
@@ -11,7 +12,6 @@ import { DrumPads } from './DrumPads'
 import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
-import type { InstrumentType } from '@/types/database'
 import type { RecordedLoop } from '@/types/audio'
 
 interface LooperCanvasProps {
@@ -23,10 +23,11 @@ interface LooperCanvasProps {
 
 export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo = 120 }: LooperCanvasProps) {
   const [showExportModal, setShowExportModal] = useState(false)
+  const [selectedLoopId, setSelectedLoopId] = useState<string | null>(null)
   const [showAIPanel, setShowAIPanel] = useState(false)
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
   
-  const { isLoading: aiLoading, suggestMelody, smoothMelody, quantizeNotes } = useAIAssistant()
+  const { isLoading: aiLoading, enhanceAllLoops, quantizeNotes } = useAIAssistant()
   
   const {
     state,
@@ -46,8 +47,12 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     toggleMetronome,
     toggleMetronomeAudio,
     setLoopVolume,
+    transposeLoop,
+    updateLoops,
     recordDrumHit,
   } = useAudioEngine({ tempo: initialTempo, loopBars: 4, initialLoops })
+
+  const selectedLoop = loops.find(l => l.id === selectedLoopId)
 
   const handleSave = () => {
     if (onSave && loops.length > 0) {
@@ -61,25 +66,34 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     }
   }
 
-  const handleSwipeInstrument = (loopId: string, direction: 'left' | 'right') => {
-    const instruments: InstrumentType[] = ['drums', 'bass', 'synth', 'piano', 'pad', 'lead']
-    const loop = loops.find((l) => l.id === loopId)
-    if (!loop) return
+  const handleEnhanceAll = () => {
+    if (loops.length === 0) return
+    const enhanced = enhanceAllLoops(loops, state.tempo, {
+      quantize: true,
+      quantizeGrid: 0.25,
+      smooth: true,
+      snapToScale: true,
+      scale: 'major',
+    })
+    updateLoops(enhanced)
+    setAiMessage('✨ Alla spår har förbättrats!')
+    setTimeout(() => setAiMessage(null), 3000)
+  }
 
-    const currentIndex = instruments.indexOf(loop.instrumentType)
-    let newIndex: number
-
-    if (direction === 'right') {
-      newIndex = (currentIndex + 1) % instruments.length
-    } else {
-      newIndex = (currentIndex - 1 + instruments.length) % instruments.length
-    }
-
-    console.log(`Change instrument for loop ${loopId} to ${instruments[newIndex]}`)
+  const handleQuantize = () => {
+    if (loops.length === 0) return
+    const quantized = loops.map(loop => ({
+      ...loop,
+      notes: quantizeNotes(loop.notes, state.tempo, 0.25)
+    }))
+    updateLoops(quantized)
+    setAiMessage('🎵 Noter kvantiserade till takten!')
+    setTimeout(() => setAiMessage(null), 3000)
   }
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen p-4">
+      {/* Header */}
       <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -113,13 +127,14 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                 onClick={clearAllLoops}
                 className="px-3 py-1.5 text-sm bg-gray-800/80 rounded-full text-gray-300 hover:bg-gray-700/80 transition-colors"
               >
-                Clear All
+                Rensa
               </motion.button>
             </>
           )}
         </div>
       </div>
 
+      {/* Pitch Display */}
       <PitchDisplay 
         pitch={currentPitch} 
         isRecording={state.isRecording} 
@@ -127,6 +142,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         lastDrumType={lastDrumType}
       />
 
+      {/* AI Panel */}
       <AnimatePresence>
         {showAIPanel && loops.length > 0 && (
           <motion.div
@@ -136,81 +152,61 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             className="absolute top-24 left-4 right-4 z-20 flex justify-center"
           >
             <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full">
-              <div className="flex items-center gap-2 mb-3">
-                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span className="font-medium text-white">AI Assistent</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="font-medium text-white">AI Assistent</span>
+                </div>
+                <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white">✕</button>
               </div>
               
               <div className="space-y-2">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={aiLoading}
-                  onClick={async () => {
-                    const allNotes = loops.flatMap(l => l.notes)
-                    const result = await suggestMelody(allNotes, state.tempo)
-                    if (result) {
-                      setAiSuggestion(result.description)
-                    }
-                  }}
+                  disabled={aiLoading || state.isPlaying}
+                  onClick={handleEnhanceAll}
                   className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 text-left hover:border-purple-400/50 transition-colors disabled:opacity-50"
                 >
-                  <div className="font-medium text-white text-sm">Föreslå melodi</div>
-                  <div className="text-xs text-gray-400">AI föreslår nästa noter</div>
+                  <div className="font-medium text-white text-sm">✨ Förbättra alla spår</div>
+                  <div className="text-xs text-gray-400">Kvantisera, jämna ut & snäpp till skala</div>
                 </motion.button>
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setAiSuggestion('Melodin har jämnats ut!')
-                  }}
-                  className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors"
+                  disabled={aiLoading || state.isPlaying}
+                  onClick={handleQuantize}
+                  className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
                 >
-                  <div className="font-medium text-white text-sm">Jämna ut melodi</div>
-                  <div className="text-xs text-gray-400">Slå ihop korta noter</div>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setAiSuggestion('Noter kvantiserade till takt!')
-                  }}
-                  className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors"
-                >
-                  <div className="font-medium text-white text-sm">Kvantisera</div>
+                  <div className="font-medium text-white text-sm">🎵 Kvantisera</div>
                   <div className="text-xs text-gray-400">Snäpp noter till takten</div>
                 </motion.button>
               </div>
 
-              {aiSuggestion && (
+              {state.isPlaying && (
+                <div className="mt-3 text-amber-400 text-xs text-center">
+                  ⏸️ Stoppa uppspelningen först
+                </div>
+              )}
+
+              {aiMessage && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="mt-3 p-2 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300"
+                  className="mt-3 p-2 rounded-lg bg-green-500/20 border border-green-500/30 text-sm text-green-300 text-center"
                 >
-                  {aiSuggestion}
+                  {aiMessage}
                 </motion.div>
-              )}
-
-              {aiLoading && (
-                <div className="mt-3 flex items-center justify-center gap-2 text-purple-400 text-sm">
-                  <motion.div
-                    className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full"
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  />
-                  AI tänker...
-                </div>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Loop Rings */}
       <div className="relative flex items-center justify-center my-8">
         <motion.div
           className="absolute rounded-full border border-gray-700/30"
@@ -233,11 +229,9 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             index={index}
             isPlaying={state.isPlaying}
             tempo={state.tempo}
-            onSwipeLeft={() => handleSwipeInstrument(loop.id, 'left')}
-            onSwipeRight={() => handleSwipeInstrument(loop.id, 'right')}
+            isSelected={selectedLoopId === loop.id}
+            onSelect={() => setSelectedLoopId(selectedLoopId === loop.id ? null : loop.id)}
             onDelete={() => deleteLoop(loop.id)}
-            onVolumeChange={(volume) => setLoopVolume(loop.id, volume)}
-            canEditVolume={!state.isPlaying}
           />
         ))}
 
@@ -250,7 +244,27 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         />
       </div>
 
-      {currentInstrument === 'drums' && (
+      {/* Loop Editor Panel */}
+      <AnimatePresence>
+        {selectedLoop && (
+          <div className="mb-4">
+            <LoopEditor
+              loop={selectedLoop}
+              isPlaying={state.isPlaying}
+              onVolumeChange={(volume) => setLoopVolume(selectedLoop.id, volume)}
+              onTranspose={(semitones) => transposeLoop(selectedLoop.id, semitones)}
+              onDelete={() => {
+                deleteLoop(selectedLoop.id)
+                setSelectedLoopId(null)
+              }}
+              onClose={() => setSelectedLoopId(null)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Drum Pads */}
+      {currentInstrument === 'drums' && !selectedLoop && (
         <div className="mb-6">
           <DrumPads
             isRecording={state.isRecording}
@@ -260,12 +274,16 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         </div>
       )}
 
-      <InstrumentSelector
-        currentInstrument={currentInstrument}
-        onSelect={setCurrentInstrument}
-        onCycle={cycleInstrument}
-      />
+      {/* Instrument Selector */}
+      {!selectedLoop && (
+        <InstrumentSelector
+          currentInstrument={currentInstrument}
+          onSelect={setCurrentInstrument}
+          onCycle={cycleInstrument}
+        />
+      )}
 
+      {/* Metronome */}
       <div className="flex items-center gap-3 mb-4">
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -280,65 +298,37 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
           title="Metronom"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </motion.button>
         
         {state.metronomeEnabled && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3"
-          >
+          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3">
             <div className="flex gap-1">
               {[0, 1, 2, 3].map((beat) => (
                 <motion.div
                   key={beat}
-                  className={`w-3 h-3 rounded-full ${
-                    beat === 0 ? 'bg-amber-500' : 'bg-gray-500'
-                  }`}
-                  animate={{
-                    scale: state.metronomeBeat === beat ? 1.5 : 1,
-                    opacity: state.metronomeBeat === beat ? 1 : 0.4,
-                  }}
+                  className={`w-3 h-3 rounded-full ${beat === 0 ? 'bg-amber-500' : 'bg-gray-500'}`}
+                  animate={{ scale: state.metronomeBeat === beat ? 1.5 : 1, opacity: state.metronomeBeat === beat ? 1 : 0.4 }}
                   transition={{ duration: 0.1 }}
                 />
               ))}
             </div>
-            
             <span className="text-sm text-amber-400">{state.tempo} BPM</span>
-            
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={toggleMetronomeAudio}
-              className={`p-1.5 rounded-full transition-all ${
-                state.metronomeAudible
-                  ? 'bg-amber-500/30 text-amber-400'
-                  : 'bg-gray-700/50 text-gray-500'
-              }`}
-              title={state.metronomeAudible ? 'Ljud på (använd hörlurar!)' : 'Ljud av (visuell)'}
+              className={`p-1.5 rounded-full transition-all ${state.metronomeAudible ? 'bg-amber-500/30 text-amber-400' : 'bg-gray-700/50 text-gray-500'}`}
+              title={state.metronomeAudible ? 'Ljud på' : 'Ljud av'}
             >
-              {state.metronomeAudible ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-              )}
+              {state.metronomeAudible ? '🔊' : '🔇'}
             </motion.button>
           </motion.div>
         )}
       </div>
 
+      {/* Transport Controls */}
       <TransportControls
         isPlaying={state.isPlaying}
         tempo={state.tempo}
@@ -350,6 +340,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         isPro={isPro}
       />
 
+      {/* Export Modal */}
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
@@ -358,6 +349,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         isPro={isPro}
       />
 
+      {/* Status */}
       <motion.div
         className="absolute bottom-4 text-center text-xs text-gray-500"
         initial={{ opacity: 0 }}
@@ -366,19 +358,12 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       >
         {state.isInitialized ? (
           state.isRecording ? (
-            <>
-              <span className="text-red-500">●</span> Recording...
-              {state.metronomeEnabled && state.metronomeAudible && ' • 🎧 Använd hörlurar!'}
-            </>
+            <><span className="text-red-500">●</span> Spelar in...</>
           ) : (
-            <>
-              <span className="text-green-500">●</span> Audio ready •{' '}
-              {loops.length} {loops.length === 1 ? 'loop' : 'loops'}
-              {state.metronomeEnabled && state.metronomeAudible && ' • 🎧 Hörlurar!'}
-            </>
+            <><span className="text-green-500">●</span> {loops.length} {loops.length === 1 ? 'spår' : 'spår'} • Klicka på en ring för att redigera</>
           )
         ) : (
-          'Tap the button to enable audio'
+          'Tryck på knappen för att starta'
         )}
       </motion.div>
     </div>

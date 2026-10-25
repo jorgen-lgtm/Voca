@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useAnimation, PanInfo } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordedLoop } from '@/types/audio'
 import type { InstrumentType } from '@/types/database'
 
@@ -10,11 +10,9 @@ interface LoopRingProps {
   index: number
   isPlaying: boolean
   tempo: number
-  onSwipeLeft: () => void
-  onSwipeRight: () => void
+  isSelected: boolean
+  onSelect: () => void
   onDelete: () => void
-  onVolumeChange?: (volume: number) => void
-  canEditVolume?: boolean
 }
 
 const INSTRUMENT_ICONS: Record<InstrumentType, string> = {
@@ -31,19 +29,15 @@ export function LoopRing({
   index,
   isPlaying,
   tempo,
-  onSwipeLeft,
-  onSwipeRight,
+  isSelected,
+  onSelect,
   onDelete,
-  onVolumeChange,
-  canEditVolume = true,
 }: LoopRingProps) {
   const controls = useAnimation()
   const ringRef = useRef<HTMLDivElement>(null)
-  const [showVolume, setShowVolume] = useState(false)
   
   const baseRadius = 100 + index * 35
   const strokeWidth = 8
-  const circumference = 2 * Math.PI * baseRadius
   
   const rotationDuration = (60 / tempo) * 4 * (loop.duration / 4)
 
@@ -63,13 +57,7 @@ export function LoopRing({
   }, [isPlaying, controls, rotationDuration])
 
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 50
-    
-    if (info.offset.x > threshold) {
-      onSwipeRight()
-    } else if (info.offset.x < -threshold) {
-      onSwipeLeft()
-    } else if (info.offset.y < -threshold) {
+    if (info.offset.y < -80) {
       onDelete()
     }
   }
@@ -82,19 +70,23 @@ export function LoopRing({
     return { x, y, note }
   })
 
+  const opacity = (loop.volume ?? 1) === 0 ? 0.3 : 1
+
   return (
     <motion.div
       ref={ringRef}
-      className="absolute"
+      className="absolute cursor-pointer"
       style={{
         width: baseRadius * 2 + strokeWidth * 2,
         height: baseRadius * 2 + strokeWidth * 2,
+        opacity,
       }}
       animate={controls}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.2}
+      drag="y"
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={0.3}
       onDragEnd={handleDragEnd}
+      onClick={onSelect}
     >
       <svg
         width={baseRadius * 2 + strokeWidth * 2}
@@ -120,11 +112,11 @@ export function LoopRing({
           cy={baseRadius + strokeWidth}
           r={baseRadius}
           fill="none"
-          stroke={`url(#gradient-${loop.id})`}
-          strokeWidth={strokeWidth}
+          stroke={isSelected ? '#a855f7' : `url(#gradient-${loop.id})`}
+          strokeWidth={isSelected ? strokeWidth + 2 : strokeWidth}
           strokeLinecap="round"
-          filter={isPlaying ? `url(#glow-${loop.id})` : undefined}
-          opacity={0.6}
+          filter={isPlaying || isSelected ? `url(#glow-${loop.id})` : undefined}
+          opacity={0.8}
         />
 
         {notePositions.map((pos, i) => (
@@ -149,13 +141,12 @@ export function LoopRing({
       </svg>
 
       <motion.div
-        className="absolute flex items-center justify-center text-lg cursor-pointer select-none"
+        className="absolute flex items-center justify-center text-lg select-none"
         style={{
           left: baseRadius + strokeWidth - 12,
           top: -8,
-          width: 32,
-          height: 32,
-          zIndex: 100,
+          width: 24,
+          height: 24,
         }}
         animate={{
           scale: isPlaying ? [1, 1.2, 1] : 1,
@@ -164,94 +155,9 @@ export function LoopRing({
           duration: 0.5,
           repeat: isPlaying ? Infinity : 0,
         }}
-        onPointerDown={(e) => {
-          e.stopPropagation()
-        }}
-        onTouchStart={(e) => {
-          e.stopPropagation()
-        }}
-        onClick={(e) => {
-          e.stopPropagation()
-          e.preventDefault()
-          setShowVolume(!showVolume)
-        }}
-        onTap={() => {
-          setShowVolume(!showVolume)
-        }}
-        whileTap={{ scale: 0.9 }}
-        title="Klicka för volymkontroll"
       >
         {INSTRUMENT_ICONS[loop.instrumentType]}
       </motion.div>
-
-      {showVolume && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          className="fixed z-[1000] bg-gray-800/95 backdrop-blur-sm rounded-xl p-4 shadow-2xl border border-purple-500/50"
-          style={{
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            minWidth: 200,
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{INSTRUMENT_ICONS[loop.instrumentType]}</span>
-              <span className="text-lg font-bold text-white">{Math.round((loop.volume ?? 1) * 100)}%</span>
-            </div>
-            <button
-              onClick={() => setShowVolume(false)}
-              className="p-2 text-gray-400 hover:text-white transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-          
-          {!canEditVolume ? (
-            <div className="text-center py-4 text-amber-400 text-sm">
-              ⏸️ Stoppa uppspelningen för att ändra volym
-            </div>
-          ) : (
-            <>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={(loop.volume ?? 1) * 100}
-                onChange={(e) => onVolumeChange?.(parseInt(e.target.value) / 100)}
-                className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500 touch-none"
-                style={{ WebkitAppearance: 'none' }}
-              />
-              
-              <div className="flex justify-between mt-4 gap-2">
-                <button
-                  onClick={() => onVolumeChange?.(0)}
-                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-                >
-                  🔇 Mute
-                </button>
-                <button
-                  onClick={() => onVolumeChange?.(0.5)}
-                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-                >
-                  50%
-                </button>
-                <button
-                  onClick={() => onVolumeChange?.(1)}
-                  className="flex-1 py-2 text-sm bg-gray-700 hover:bg-gray-600 active:bg-gray-500 rounded-lg transition-colors"
-                >
-                  100%
-                </button>
-              </div>
-            </>
-          )}
-        </motion.div>
-      )}
     </motion.div>
   )
 }

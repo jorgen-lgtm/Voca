@@ -638,6 +638,26 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     ))
   }, [])
 
+  const transposeLoop = useCallback((loopId: string, semitones: number) => {
+    setLoops((prev) => prev.map((loop) => {
+      if (loop.id !== loopId) return loop
+      // Don't transpose drums
+      if (loop.instrumentType === 'drums') return loop
+      
+      return {
+        ...loop,
+        notes: loop.notes.map(note => ({
+          ...note,
+          pitch: Math.max(0, Math.min(127, note.pitch + semitones))
+        }))
+      }
+    }))
+  }, [])
+
+  const updateLoops = useCallback((newLoops: RecordedLoop[]) => {
+    setLoops(newLoops)
+  }, [])
+
   const clearAllLoops = useCallback(() => {
     stopPlayback()
     setLoops([])
@@ -792,6 +812,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     toggleMetronome,
     toggleMetronomeAudio,
     setLoopVolume,
+    transposeLoop,
+    updateLoops,
   }
 }
 

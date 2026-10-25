@@ -105,76 +105,81 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen p-4">
-      {/* Header */}
-      <div className="absolute top-4 left-4 right-20 flex justify-between items-center z-10">
+      {/* Header - Left side */}
+      <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3"
+          className="flex items-center gap-2"
         >
-          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             HumWeave
           </span>
           <Link
             href="/help"
-            className="text-xs px-2 py-1 bg-gray-800/60 rounded-full text-gray-400 hover:text-white hover:bg-gray-700/60 transition-colors"
+            className="hidden sm:block text-xs px-2 py-1 bg-gray-800/60 rounded-full text-gray-400 hover:text-white hover:bg-gray-700/60 transition-colors"
           >
             Help
           </Link>
-          {/* Mic Toggle */}
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            onClick={toggleMic}
-            className={`p-2 rounded-full transition-colors ${
-              micEnabled 
-                ? 'bg-green-600/80 text-white' 
-                : 'bg-gray-800/80 text-gray-400'
-            }`}
-            title={micEnabled ? 'Microphone ON' : 'Microphone OFF'}
-          >
-            {micEnabled ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-              </svg>
-            )}
-          </motion.button>
         </motion.div>
+      </div>
 
-        <div className="flex items-center gap-2">
-          {loops.length > 0 && (
-            <>
-              <motion.button
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                onClick={() => setShowAIPanel(!showAIPanel)}
-                className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
-                  showAIPanel 
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' 
-                    : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700/80'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                AI
-              </motion.button>
-              <motion.button
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                onClick={clearAllLoops}
-                className="px-3 py-1.5 text-sm bg-gray-800/80 rounded-full text-gray-300 hover:bg-gray-700/80 transition-colors"
-              >
-                Clear
-              </motion.button>
-            </>
+      {/* Header - Center controls */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+        {/* Mic Toggle */}
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          onClick={toggleMic}
+          className={`p-2.5 rounded-full transition-colors ${
+            micEnabled 
+              ? 'bg-green-600 text-white shadow-lg shadow-green-500/30' 
+              : 'bg-gray-800 text-gray-400 border border-gray-700'
+          }`}
+          title={micEnabled ? 'Microphone ON' : 'Microphone OFF'}
+        >
+          {micEnabled ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+            </svg>
           )}
-        </div>
+        </motion.button>
+
+        {loops.length > 0 && (
+          <>
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={() => setShowAIPanel(!showAIPanel)}
+              className={`p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
+                showAIPanel 
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' 
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="hidden sm:inline">AI</span>
+            </motion.button>
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={clearAllLoops}
+              className="p-2.5 sm:px-3 sm:py-1.5 text-sm bg-gray-800 rounded-full text-gray-300 hover:bg-gray-700 transition-colors border border-gray-700"
+            >
+              <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span className="hidden sm:inline">Clear</span>
+            </motion.button>
+          </>
+        )}
       </div>
 
       {/* Pitch Display */}

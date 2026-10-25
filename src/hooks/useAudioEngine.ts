@@ -70,100 +70,99 @@ type InstrumentSynth = Tone.PolySynth | Tone.Sampler
 
 function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume): InstrumentSynth {
   // Simplified effects chain - limiter to prevent clipping
-  const limiter = new Tone.Limiter(-3).connect(masterVolume)
-  const reverb = new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(limiter)
+  const limiter = new Tone.Limiter(-6).connect(masterVolume)
+  const reverb = new Tone.Reverb({ decay: 0.8, wet: 0.1 }).connect(limiter)
   
-  // All instruments normalized to -12 dB baseline
-  const baseVolume = -12
+  // All instruments normalized to -15 dB baseline (lower to prevent clipping)
+  const baseVolume = -15
   
   switch (type) {
     case 'bass': {
-      // Deep bass with filter
-      const bassFilter = new Tone.Filter(500, 'lowpass').connect(reverb)
+      // Simple bass - MonoSynth to prevent voice buildup
       const synth = new Tone.MonoSynth({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.01, decay: 0.3, sustain: 0.4, release: 0.3 },
-        filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.3, baseFrequency: 150, octaves: 2 },
-      }).connect(bassFilter)
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.2 },
+        filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.2, baseFrequency: 200, octaves: 1.5 },
+      }).connect(reverb)
       synth.volume.value = baseVolume
       return synth as unknown as InstrumentSynth
     }
     case 'piano': {
-      // Bright piano with fast attack and long decay
+      // Piano - limited polyphony with shorter release
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 8
+      synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'triangle' },
-        envelope: { attack: 0.002, decay: 1.5, sustain: 0.05, release: 1.2 },
+        envelope: { attack: 0.002, decay: 0.8, sustain: 0.02, release: 0.5 },
       })
       synth.volume.value = baseVolume
       return synth
     }
     case 'guitar': {
-      // Plucky guitar - different from piano with shorter decay, slight attack
+      // Plucky guitar - short notes
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 6
+      synth.maxPolyphony = 4
       synth.set({
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.008, decay: 0.4, sustain: 0.15, release: 0.6 },
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.005, decay: 0.3, sustain: 0.1, release: 0.3 },
       })
       synth.volume.value = baseVolume
       return synth
     }
     case 'strings': {
-      // Soft strings with slow attack
+      // Strings - soft pads
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 6
+      synth.maxPolyphony = 3
       synth.set({
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.4, decay: 0.3, sustain: 0.6, release: 1.2 },
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.3, decay: 0.2, sustain: 0.5, release: 0.6 },
       })
-      synth.volume.value = baseVolume - 2 // Slightly lower due to sustained nature
+      synth.volume.value = baseVolume - 3
       return synth
     }
     case 'brass': {
-      // Punchy brass
+      // Brass - punchy
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 4
+      synth.maxPolyphony = 3
       synth.set({
         oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.06, decay: 0.2, sustain: 0.5, release: 0.25 },
+        envelope: { attack: 0.04, decay: 0.15, sustain: 0.4, release: 0.2 },
       })
-      synth.volume.value = baseVolume - 2 // Slightly lower due to harsh overtones
+      synth.volume.value = baseVolume - 4
       return synth
     }
     case 'organ': {
-      // Sustained organ
+      // Organ - sustained
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 6
+      synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.85, release: 0.15 },
+        envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.1 },
       })
       synth.volume.value = baseVolume
       return synth
     }
     case 'voice': {
-      // Soft vocal/choir
+      // Voice - soft
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 4
+      synth.maxPolyphony = 3
       synth.set({
         oscillator: { type: 'sine' },
-        envelope: { attack: 0.15, decay: 0.2, sustain: 0.6, release: 0.4 },
+        envelope: { attack: 0.1, decay: 0.15, sustain: 0.5, release: 0.3 },
       })
       synth.volume.value = baseVolume
       return synth
     }
     case 'synth':
     default: {
-      // Classic synth
+      // Synth - classic
       const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
-      synth.maxPolyphony = 6
+      synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'square' },
-        envelope: { attack: 0.02, decay: 0.2, sustain: 0.4, release: 0.4 },
+        envelope: { attack: 0.02, decay: 0.15, sustain: 0.3, release: 0.2 },
       })
-      synth.volume.value = baseVolume - 2 // Slightly lower due to harsh square wave
+      synth.volume.value = baseVolume - 3
       return synth
     }
   }
@@ -835,6 +834,19 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [])
 
+  // Release all held notes to prevent voice buildup
+  const releaseAllNotes = useCallback(() => {
+    instrumentsRef.current.forEach((instrument) => {
+      if (instrument && 'releaseAll' in instrument) {
+        try {
+          (instrument as Tone.PolySynth).releaseAll()
+        } catch (e) {
+          console.warn('Failed to release notes:', e)
+        }
+      }
+    })
+  }, [])
+
   const startPlayback = useCallback(async () => {
     if (loops.length === 0) return
 
@@ -844,6 +856,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     const transport = Tone.getTransport()
+    
+    // Release any hanging notes
+    releaseAllNotes()
     
     // Stop and dispose previous part
     if (loopPartRef.current) {
@@ -856,6 +871,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     transport.stop()
     transport.position = 0
 
+    // Small delay to let audio settle
+    await new Promise(resolve => setTimeout(resolve, 50))
+
     const allEvents: Array<{ time: number; note: string; duration: number; instrument: InstrumentType; midiNote: number; volume: number; loopId: string }> = []
 
     // Collect all events from all loops
@@ -863,13 +881,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       console.log(`Processing loop ${loop.id} (${loop.instrumentType}): ${loop.notes.length} notes, volume: ${loop.volume}`)
       if (loop.notes.length > 0 && (loop.volume ?? 1) > 0) {
         loop.notes.forEach((note) => {
+          // Limit note duration to prevent long sustains
+          const maxDuration = Math.min(note.duration, 2)
           allEvents.push({
             time: note.startTime,
             note: midiToNoteName(note.pitch),
-            duration: note.duration,
+            duration: maxDuration,
             instrument: loop.instrumentType,
             midiNote: note.pitch,
-            volume: loop.volume ?? 1,
+            volume: (loop.volume ?? 1) * 0.8, // Reduce overall volume
             loopId: loop.id,
           })
         })
@@ -899,7 +919,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         const instrument = instrumentsRef.current.get(event.instrument as InstrumentType)
         if (instrument && 'triggerAttackRelease' in instrument) {
           try {
-            instrument.triggerAttackRelease(event.note, event.duration, time, velocity)
+            instrument.triggerAttackRelease(event.note, event.duration, time, velocity * 0.7)
           } catch (e) {
             console.warn('Playback note error:', e)
           }
@@ -917,10 +937,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     transport.start()
 
     setState((prev) => ({ ...prev, isPlaying: true }))
-  }, [loops, playDrumNote])
+  }, [loops, playDrumNote, releaseAllNotes])
 
   const stopPlayback = useCallback(() => {
     const transport = Tone.getTransport()
+    
+    // Release all held notes
+    releaseAllNotes()
     
     if (loopPartRef.current) {
       loopPartRef.current.stop()
@@ -932,7 +955,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     transport.position = 0
 
     setState((prev) => ({ ...prev, isPlaying: false }))
-  }, [])
+  }, [releaseAllNotes])
 
   const togglePlayback = useCallback(() => {
     if (state.isPlaying) {

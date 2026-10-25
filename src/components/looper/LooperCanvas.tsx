@@ -15,7 +15,8 @@ import { ExportModal } from './ExportModal'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
 import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
-import { PRODUCER_PERSONA, getProducerTip, suggestNextInstrument, assessQuality } from '@/config/producer'
+import { PRODUCER_PERSONA, getProducerTip, assessQuality } from '@/config/producer'
+import { getSuggestions, createLoopFromSuggestion, getMelodyDevelopments, createLoopFromMelodyDevelopment } from '@/lib/musicGenerator'
 import type { RecordedLoop } from '@/types/audio'
 
 interface LooperCanvasProps {
@@ -108,6 +109,44 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     }))
     updateLoops(quantized)
     setAiMessage(getProducerTip('quantize'))
+    setTimeout(() => setAiMessage(null), 4000)
+  }
+
+  // Get music suggestions from AI producer
+  const suggestions = getSuggestions(loops.map(l => l.instrumentType))
+  
+  // Find user's melody loop (first non-drum melodic track)
+  const userMelodyLoop = loops.find(l => 
+    l.instrumentType !== 'drums' && l.notes.length > 3
+  )
+  
+  // Get melody development options if user has a melody
+  const melodyDevelopments = userMelodyLoop ? getMelodyDevelopments(userMelodyLoop) : []
+  
+  // Handle adding a suggested track
+  const handleAddSuggestion = (suggestionIndex: number) => {
+    const suggestion = suggestions[suggestionIndex]
+    if (!suggestion) return
+    
+    // Use master loop duration if available, otherwise default to 4 bars
+    const duration = masterLoopDuration || (60 / state.tempo) * 4 * 2
+    const newLoop = createLoopFromSuggestion(suggestion, duration, state.tempo)
+    
+    updateLoops([...loops, newLoop])
+    setAiMessage(`🎹 Lade till ${suggestion.name}! Lyssna och se om du gillar det.`)
+    setTimeout(() => setAiMessage(null), 4000)
+  }
+  
+  // Handle adding a melody development (bass/drums/harmony based on user's melody)
+  const handleAddMelodyDevelopment = (devIndex: number) => {
+    if (!userMelodyLoop) return
+    const development = melodyDevelopments[devIndex]
+    if (!development) return
+    
+    const newLoop = createLoopFromMelodyDevelopment(development, userMelodyLoop, state.tempo)
+    
+    updateLoops([...loops, newLoop])
+    setAiMessage(`🎵 ${development.name} tillagd! Baserat på din melodi.`)
     setTimeout(() => setAiMessage(null), 4000)
   }
 
@@ -226,19 +265,66 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                 <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white p-1">✕</button>
               </div>
 
-              {/* Producer Suggestion */}
+              {/* Producer Message */}
               <div className="mb-3 p-3 rounded-xl bg-gray-900/50 border border-gray-700/50">
                 <p className="text-sm text-gray-300 leading-relaxed">
                   {loops.length === 0 
                     ? getProducerTip('empty')
-                    : suggestNextInstrument(loops.map(l => l.instrumentType))
+                    : userMelodyLoop
+                      ? `🎵 Fin melodi! Vill du att jag bygger vidare på den?`
+                      : `Spela in en melodi så hjälper jag dig utveckla den med bas, trummor och harmonier.`
                   }
                 </p>
               </div>
 
+              {/* Melody Development Suggestions - when user has a melody */}
+              {userMelodyLoop && melodyDevelopments.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs text-purple-400 mb-2 font-medium">🎹 Utveckla din melodi:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {melodyDevelopments.map((dev, index) => (
+                      <motion.button
+                        key={dev.type}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleAddMelodyDevelopment(index)}
+                        disabled={state.isPlaying}
+                        className="p-2 rounded-lg bg-gradient-to-r from-green-600/20 to-teal-600/20 border border-green-500/30 text-left hover:border-green-400/50 transition-colors disabled:opacity-50"
+                      >
+                        <div className="font-medium text-white text-xs">{dev.name}</div>
+                        <div className="text-[10px] text-gray-400 line-clamp-1">{dev.description}</div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Add Suggestions - when no melody yet */}
+              {!userMelodyLoop && suggestions.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs text-purple-400 mb-2 font-medium">🎵 Eller låt mig skapa något:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {suggestions.slice(0, 2).map((sug, index) => (
+                      <motion.button
+                        key={sug.type}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleAddSuggestion(index)}
+                        disabled={state.isPlaying}
+                        className="p-2 rounded-lg bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
+                      >
+                        <div className="font-medium text-white text-xs">{sug.name}</div>
+                        <div className="text-[10px] text-gray-400 line-clamp-1">{sug.description}</div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Quality Assessment */}
               {loops.length > 0 && (
                 <div className="mb-3 flex items-center gap-2">
+                  <div className="text-xs text-gray-500">Kvalitet:</div>
                   <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
@@ -247,24 +333,23 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                       transition={{ duration: 0.5 }}
                     />
                   </div>
-                  <span className="text-xs text-gray-400 w-12 text-right">
+                  <span className="text-xs text-gray-400 w-8 text-right">
                     {assessQuality(loops).score}%
                   </span>
                 </div>
               )}
               
-              {/* Action Buttons */}
+              {/* Enhancement Actions */}
               {loops.length > 0 && (
-                <div className="space-y-2">
+                <div className="flex gap-2">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     disabled={aiLoading || state.isPlaying}
                     onClick={handleEnhanceAll}
-                    className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/30 to-pink-600/30 border border-purple-500/40 text-left hover:border-purple-400/60 transition-colors disabled:opacity-50"
+                    className="flex-1 p-2 rounded-lg bg-gradient-to-r from-purple-600/30 to-pink-600/30 border border-purple-500/40 text-center hover:border-purple-400/60 transition-colors disabled:opacity-50"
                   >
-                    <div className="font-medium text-white text-sm">🎚️ Polera alla spår</div>
-                    <div className="text-xs text-gray-400">Fixa timing, rensa brus, sätt i skala</div>
+                    <div className="font-medium text-white text-xs">🎚️ Polera</div>
                   </motion.button>
 
                   <motion.button
@@ -272,10 +357,9 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                     whileTap={{ scale: 0.98 }}
                     disabled={aiLoading || state.isPlaying}
                     onClick={handleQuantize}
-                    className="w-full p-3 rounded-xl bg-gray-700/50 border border-gray-600/30 text-left hover:border-gray-500/50 transition-colors disabled:opacity-50"
+                    className="flex-1 p-2 rounded-lg bg-gray-700/50 border border-gray-600/30 text-center hover:border-gray-500/50 transition-colors disabled:opacity-50"
                   >
-                    <div className="font-medium text-white text-sm">⏱️ Fixa timing</div>
-                    <div className="text-xs text-gray-400">Lägg noter på rätt beat</div>
+                    <div className="font-medium text-white text-xs">⏱️ Timing</div>
                   </motion.button>
                 </div>
               )}

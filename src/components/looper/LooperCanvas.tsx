@@ -269,10 +269,17 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         transition={{ delay: 1 }}
       >
         {state.isInitialized ? (
-          <>
-            <span className="text-green-500">●</span> Audio ready •{' '}
-            {loops.length} loops recorded
-          </>
+          state.isRecording ? (
+            <>
+              <span className="text-red-500">●</span> Recording... (playback paused)
+            </>
+          ) : (
+            <>
+              <span className="text-green-500">●</span> Audio ready •{' '}
+              {loops.length} {loops.length === 1 ? 'loop' : 'loops'}
+              {loops.length > 0 && ' • Use headphones for overdub'}
+            </>
+          )
         ) : (
           'Tap the button to enable audio'
         )}

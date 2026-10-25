@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 
 interface RecordButtonProps {
@@ -19,15 +19,24 @@ export function RecordButton({
   onInitialize,
 }: RecordButtonProps) {
   const [isInitializing, setIsInitializing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleInteraction = async () => {
+  const handleInteraction = useCallback(async (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault()
+    setError(null)
+    
     if (!isInitialized) {
       setIsInitializing(true)
       try {
         const success = await onInitialize()
         if (success) {
-          onPress()
+          setTimeout(() => onPress(), 100)
+        } else {
+          setError('Kunde inte starta ljud')
         }
+      } catch (err) {
+        console.error('Init error:', err)
+        setError('Tillåt mikrofon-åtkomst')
       } finally {
         setIsInitializing(false)
       }
@@ -39,7 +48,7 @@ export function RecordButton({
     } else {
       onPress()
     }
-  }
+  }, [isInitialized, isRecording, onInitialize, onPress, onRelease])
 
   return (
     <div className="relative flex items-center justify-center">
@@ -62,8 +71,9 @@ export function RecordButton({
 
       <motion.button
         onClick={handleInteraction}
+        onTouchEnd={handleInteraction}
         disabled={isInitializing}
-        className={`relative w-28 h-28 rounded-full flex items-center justify-center ${
+        className={`relative w-28 h-28 rounded-full flex items-center justify-center touch-none select-none ${
           isInitializing
             ? 'bg-gradient-to-br from-yellow-500 to-orange-600'
             : isRecording
@@ -122,9 +132,21 @@ export function RecordButton({
           )}
         </motion.div>
 
-        {!isInitialized && (
+        {!isInitialized && !error && (
           <div className="absolute -bottom-8 text-xs text-gray-400 whitespace-nowrap">
-            Tap to start
+            Tryck för att starta
+          </div>
+        )}
+        
+        {error && (
+          <div className="absolute -bottom-8 text-xs text-red-400 whitespace-nowrap">
+            {error}
+          </div>
+        )}
+        
+        {isInitializing && (
+          <div className="absolute -bottom-8 text-xs text-yellow-400 whitespace-nowrap animate-pulse">
+            Startar...
           </div>
         )}
       </motion.button>

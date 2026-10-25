@@ -118,21 +118,31 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia not supported')
-        alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Firefox.')
+        alert('Din webbläsare stöder inte mikrofon-åtkomst. Prova Chrome eller Safari.')
         return false
       }
+
+      await Tone.start()
+      console.log('Tone.js started')
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 44100,
         },
       })
+      console.log('Got media stream')
       mediaStreamRef.current = stream
 
-      await Tone.start()
-      audioContextRef.current = new AudioContext()
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      audioContextRef.current = new AudioContextClass()
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+      console.log('AudioContext state:', audioContextRef.current.state)
       const source = audioContextRef.current.createMediaStreamSource(stream)
       
       highPassFilterRef.current = audioContextRef.current.createBiquadFilter()

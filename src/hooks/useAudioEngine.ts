@@ -99,6 +99,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
+  const lastDetectedPitchRef = useRef<number | null>(null)
+  const pitchStabilityCountRef = useRef<number>(0)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
 
@@ -125,13 +127,13 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       highPassFilterRef.current = audioContextRef.current.createBiquadFilter()
       highPassFilterRef.current.type = 'highpass'
-      highPassFilterRef.current.frequency.value = 80
-      highPassFilterRef.current.Q.value = 0.7
+      highPassFilterRef.current.frequency.value = 100
+      highPassFilterRef.current.Q.value = 1.0
       
       lowPassFilterRef.current = audioContextRef.current.createBiquadFilter()
       lowPassFilterRef.current.type = 'lowpass'
-      lowPassFilterRef.current.frequency.value = 1200
-      lowPassFilterRef.current.Q.value = 0.7
+      lowPassFilterRef.current.frequency.value = 800
+      lowPassFilterRef.current.Q.value = 1.0
       
       analyserRef.current = audioContextRef.current.createAnalyser()
       analyserRef.current.fftSize = 2048
@@ -186,30 +188,52 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
     rms = Math.sqrt(rms / buffer.length)
 
-    const minVolume = 0.003
+    const minVolume = 0.025
     if (rms < minVolume) {
+      lastDetectedPitchRef.current = null
+      pitchStabilityCountRef.current = 0
       setCurrentPitch(null)
       return null
     }
 
     const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate)
 
-    if (frequency > 0 && frequency > 60 && frequency < 1000) {
+    if (frequency > 0 && frequency > 80 && frequency < 800) {
       const midiNote = frequencyToMidi(frequency)
-      const noteName = midiToNoteName(midiNote)
-      const clarity = Math.min(rms * 15, 1)
-
-      const result: PitchDetectionResult = {
-        frequency,
-        clarity,
-        midiNote,
-        noteName,
+      
+      if (lastDetectedPitchRef.current === midiNote) {
+        pitchStabilityCountRef.current++
+      } else {
+        pitchStabilityCountRef.current = 1
+        lastDetectedPitchRef.current = midiNote
       }
 
-      setCurrentPitch(result)
-      return result
+      if (pitchStabilityCountRef.current >= 3) {
+        const noteName = midiToNoteName(midiNote)
+        const clarity = Math.min(rms * 10, 1)
+
+        const result: PitchDetectionResult = {
+          frequency,
+          clarity,
+          midiNote,
+          noteName,
+        }
+
+        setCurrentPitch(result)
+        return result
+      } else {
+        setCurrentPitch({
+          frequency,
+          clarity: Math.min(rms * 10, 1),
+          midiNote: null,
+          noteName: null,
+        })
+        return null
+      }
     }
 
+    lastDetectedPitchRef.current = null
+    pitchStabilityCountRef.current = 0
     setCurrentPitch(null)
     return null
   }, [])
@@ -239,7 +263,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
 
       const pitch = detectPitch()
 
-      if (pitch && pitch.midiNote && pitch.clarity > 0.01) {
+      if (pitch && pitch.midiNote && pitch.clarity > 0.1) {
         const currentTime = Tone.now() - recordingStartTimeRef.current
 
         if (!lastNoteRef.current || lastNoteRef.current.midi !== pitch.midiNote) {
@@ -485,7 +509,7 @@ function autoCorrelate(buffer: Float32Array, sampleRate: number): number {
   }
   rms = Math.sqrt(rms / SIZE)
 
-  if (rms < 0.01) return -1
+  if (rms < 0.02) return -1
 
   let lastCorrelation = 1
   for (let offset = 0; offset < MAX_SAMPLES; offset++) {

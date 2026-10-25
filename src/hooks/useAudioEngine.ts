@@ -194,6 +194,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const [currentPitch, setCurrentPitch] = useState<PitchDetectionResult | null>(null)
   const [audioLevel, setAudioLevel] = useState<number>(0)
   const [micEnabled, setMicEnabled] = useState<boolean>(true)
+  const micEnabledRef = useRef<boolean>(true)
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
@@ -410,6 +411,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const detectPitch = useCallback(() => {
+    if (!micEnabledRef.current) {
+      return null
+    }
+    
     if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
       return null
     }
@@ -652,7 +657,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       if (!isRecordingRef.current) return
 
       // Only do pitch detection if mic is enabled and not drums
-      if (currentInstrument !== 'drums' && micEnabled) {
+      if (currentInstrument !== 'drums' && micEnabledRef.current) {
         const pitch = detectPitch()
 
         if (pitch && pitch.midiNote) {
@@ -986,7 +991,15 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const toggleMic = useCallback(() => {
-    setMicEnabled(prev => !prev)
+    setMicEnabled(prev => {
+      const newValue = !prev
+      micEnabledRef.current = newValue
+      if (!newValue) {
+        setCurrentPitch(null)
+        setAudioLevel(0)
+      }
+      return newValue
+    })
   }, [])
 
   useEffect(() => {

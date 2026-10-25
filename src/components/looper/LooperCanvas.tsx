@@ -182,15 +182,17 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         )}
       </div>
 
-      {/* Pitch Display */}
-      <PitchDisplay 
-        pitch={currentPitch} 
-        audioLevel={audioLevel}
-        isRecording={state.isRecording} 
-        isDrumMode={currentInstrument === 'drums'}
-        isVoiceMode={currentInstrument === 'voice'}
-        lastDrumType={lastDrumType}
-      />
+      {/* Pitch Display - only show when mic is enabled */}
+      {micEnabled && (
+        <PitchDisplay 
+          pitch={currentPitch} 
+          audioLevel={audioLevel}
+          isRecording={state.isRecording} 
+          isDrumMode={currentInstrument === 'drums'}
+          isVoiceMode={currentInstrument === 'voice'}
+          lastDrumType={lastDrumType}
+        />
+      )}
 
       {/* AI Panel */}
       <AnimatePresence>

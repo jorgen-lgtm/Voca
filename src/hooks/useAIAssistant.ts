@@ -118,12 +118,83 @@ export function useAIAssistant() {
     return smoothed
   }, [])
 
-  // Remove notes that are too quiet or too short
+  // Remove notes that are too quiet or too short (noise)
   const cleanupNotes = useCallback((notes: MidiNote[]): MidiNote[] => {
     return notes.filter(note => 
-      note.duration >= 0.05 && 
-      note.velocity > 20
+      note.duration >= 0.08 &&  // Minimum 80ms
+      note.velocity > 30        // Minimum velocity
     )
+  }, [])
+
+  // Remove outlier notes (likely noise/errors)
+  const removeOutliers = useCallback((notes: MidiNote[]): MidiNote[] => {
+    if (notes.length < 3) return notes
+    
+    const sorted = [...notes].sort((a, b) => a.startTime - b.startTime)
+    const result: MidiNote[] = []
+    
+    for (let i = 0; i < sorted.length; i++) {
+      const note = sorted[i]
+      const prev = i > 0 ? sorted[i - 1] : null
+      const next = i < sorted.length - 1 ? sorted[i + 1] : null
+      
+      // Check if this note is an outlier (too far from neighbors)
+      const prevDiff = prev ? Math.abs(note.pitch - prev.pitch) : 0
+      const nextDiff = next ? Math.abs(note.pitch - next.pitch) : 0
+      
+      // If both neighbors exist and this note jumps > octave from both, likely noise
+      if (prev && next && prevDiff > 12 && nextDiff > 12) {
+        continue // Skip this note
+      }
+      
+      // If note is very short and jumps far, likely noise
+      if (note.duration < 0.12 && (prevDiff > 7 || nextDiff > 7)) {
+        continue // Skip this note
+      }
+      
+      result.push(note)
+    }
+    
+    return result
+  }, [])
+
+  // Consolidate repeated notes into longer notes
+  const consolidateNotes = useCallback((notes: MidiNote[]): MidiNote[] => {
+    if (notes.length < 2) return notes
+    
+    const sorted = [...notes].sort((a, b) => a.startTime - b.startTime)
+    const result: MidiNote[] = []
+    
+    let i = 0
+    while (i < sorted.length) {
+      const currentNote = { ...sorted[i] }
+      let j = i + 1
+      
+      // Look for consecutive similar notes
+      while (j < sorted.length) {
+        const nextNote = sorted[j]
+        const gap = nextNote.startTime - (currentNote.startTime + currentNote.duration)
+        const pitchDiff = Math.abs(nextNote.pitch - currentNote.pitch)
+        
+        // Merge if same pitch (or very close) and small gap
+        if (pitchDiff <= 2 && gap < 0.2 && gap > -0.1) {
+          // Extend duration
+          currentNote.duration = (nextNote.startTime + nextNote.duration) - currentNote.startTime
+          // Use the more common pitch
+          if (pitchDiff > 0) {
+            currentNote.pitch = nextNote.duration > currentNote.duration ? nextNote.pitch : currentNote.pitch
+          }
+          j++
+        } else {
+          break
+        }
+      }
+      
+      result.push(currentNote)
+      i = j
+    }
+    
+    return result
   }, [])
 
   // Apply all AI enhancements to a loop
@@ -143,24 +214,30 @@ export function useAIAssistant() {
     
     let notes = [...loop.notes]
     
-    // Step 1: Clean up
+    // Step 1: Remove very short/quiet notes (noise)
     notes = cleanupNotes(notes)
     
-    // Step 2: Smooth melody (merge short notes)
+    // Step 2: Remove outlier notes (likely errors)
+    notes = removeOutliers(notes)
+    
+    // Step 3: Consolidate repeated similar notes
+    notes = consolidateNotes(notes)
+    
+    // Step 4: Smooth melody (merge short notes)
     if (options.smooth !== false) {
       notes = smoothMelody(notes)
     }
     
-    // Step 3: Snap to scale
+    // Step 5: Snap to scale
     if (options.snapToScale) {
       notes = snapToScale(
         notes, 
         options.rootNote ?? 60, 
-        options.scale ?? 'major'
+        options.scale ?? 'pentatonic' // Use pentatonic for cleaner sound
       )
     }
     
-    // Step 4: Quantize to grid
+    // Step 6: Quantize to grid
     if (options.quantize !== false) {
       notes = quantizeNotes(
         notes, 
@@ -169,13 +246,16 @@ export function useAIAssistant() {
       )
     }
     
+    // Step 7: Final cleanup - remove any remaining short notes
+    notes = notes.filter(n => n.duration >= 0.1)
+    
     setIsLoading(false)
     
     return {
       ...loop,
       notes,
     }
-  }, [cleanupNotes, smoothMelody, snapToScale, quantizeNotes])
+  }, [cleanupNotes, removeOutliers, consolidateNotes, smoothMelody, snapToScale, quantizeNotes])
 
   // Enhance all loops in a project
   const enhanceAllLoops = useCallback((
@@ -231,6 +311,8 @@ export function useAIAssistant() {
     snapToScale,
     smoothMelody,
     cleanupNotes,
+    removeOutliers,
+    consolidateNotes,
     enhanceLoop,
     enhanceAllLoops,
     detectKey,

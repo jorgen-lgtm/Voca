@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useAnimation, PanInfo } from 'framer-motion'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import type { RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
 
@@ -29,6 +29,7 @@ export function LoopRing({
   
   const baseRadius = 100 + index * 35
   const strokeWidth = 8
+  const hitAreaWidth = 24 // Wider hit area for easier tapping
   
   const rotationDuration = (60 / tempo) * 4 * (loop.duration / 4)
 
@@ -53,6 +54,12 @@ export function LoopRing({
     }
   }
 
+  // Handle click on the ring itself
+  const handleRingClick = useCallback((e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation()
+    onSelect()
+  }, [onSelect])
+
   const notePositions = loop.notes.map((note) => {
     const angle = (note.startTime / loop.duration) * 360 - 90
     const radians = (angle * Math.PI) / 180
@@ -66,24 +73,25 @@ export function LoopRing({
   return (
     <motion.div
       ref={ringRef}
-      className="absolute cursor-pointer"
+      className="absolute"
       style={{
         width: baseRadius * 2 + strokeWidth * 2,
         height: baseRadius * 2 + strokeWidth * 2,
         opacity,
         willChange: isPlaying ? 'transform' : 'auto',
+        pointerEvents: 'none', // Container doesn't capture clicks
       }}
       animate={controls}
       drag="y"
       dragConstraints={{ top: 0, bottom: 0 }}
       dragElastic={0.3}
       onDragEnd={handleDragEnd}
-      onClick={onSelect}
     >
       <svg
         width={baseRadius * 2 + strokeWidth * 2}
         height={baseRadius * 2 + strokeWidth * 2}
         className="absolute inset-0"
+        style={{ pointerEvents: 'none' }}
       >
         <defs>
           <linearGradient id={`gradient-${loop.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -99,6 +107,20 @@ export function LoopRing({
           </filter>
         </defs>
 
+        {/* Invisible hit area - wider stroke for easier tapping */}
+        <circle
+          cx={baseRadius + strokeWidth}
+          cy={baseRadius + strokeWidth}
+          r={baseRadius}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={hitAreaWidth}
+          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+          onClick={handleRingClick}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+
+        {/* Visible ring */}
         <circle
           cx={baseRadius + strokeWidth}
           cy={baseRadius + strokeWidth}
@@ -109,6 +131,7 @@ export function LoopRing({
           strokeLinecap="round"
           filter={isPlaying || isSelected ? `url(#glow-${loop.id})` : undefined}
           opacity={0.8}
+          style={{ pointerEvents: 'none' }}
         />
 
         {notePositions.map((pos, i) => (
@@ -119,18 +142,22 @@ export function LoopRing({
             r={4}
             fill={loop.color}
             opacity={0.9}
+            style={{ pointerEvents: 'none' }}
           />
         ))}
       </svg>
 
+      {/* Instrument icon - also clickable */}
       <div
-        className="absolute flex items-center justify-center text-lg select-none"
+        className="absolute flex items-center justify-center text-lg select-none cursor-pointer"
         style={{
           left: baseRadius + strokeWidth - 12,
           top: -8,
           width: 24,
           height: 24,
+          pointerEvents: 'auto',
         }}
+        onClick={handleRingClick}
       >
         {getInstrumentConfig(loop.instrumentType).icon}
       </div>

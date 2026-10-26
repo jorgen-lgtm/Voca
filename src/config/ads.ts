@@ -1,11 +1,11 @@
 // Ad Configuration
-// Replace these with your actual ad network IDs when ready to monetize
+// Google AdSense Publisher ID: ca-pub-8489834818532493
 
 export const AD_CONFIG = {
-  // Google AdSense - set NEXT_PUBLIC_ADSENSE_ID to enable real ads
-  adsensePublisherId: process.env.NEXT_PUBLIC_ADSENSE_ID || '',
+  // Google AdSense
+  adsensePublisherId: process.env.NEXT_PUBLIC_ADSENSE_ID || 'ca-pub-8489834818532493',
   
-  // Ad slots
+  // Ad slots - create these in your AdSense dashboard
   slots: {
     banner: process.env.NEXT_PUBLIC_AD_SLOT_BANNER || '',
     interstitial: process.env.NEXT_PUBLIC_AD_SLOT_INTERSTITIAL || '',
@@ -18,12 +18,12 @@ export const AD_CONFIG = {
   // Interstitial frequency (show after X loops recorded)
   interstitialFrequency: 5,
   
-  // Use promotional banner (upgrade to Pro) when no AdSense is configured
-  // Set to false to hide all ads when AdSense isn't set up
+  // Use promotional banner (upgrade to Pro) as fallback when no ad slots configured
   usePromoBannerAsFallback: true,
   
-  // Real AdSense ads enabled when ID is set
-  hasRealAds: !!process.env.NEXT_PUBLIC_ADSENSE_ID,
+  // Real AdSense ads enabled - publisher ID is now configured
+  // Will show real ads when ad slots are also configured
+  hasRealAds: !!(process.env.NEXT_PUBLIC_AD_SLOT_BANNER),
 }
 
 // Check if user should see ads

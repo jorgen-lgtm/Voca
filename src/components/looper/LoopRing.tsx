@@ -71,6 +71,7 @@ export function LoopRing({
         width: baseRadius * 2 + strokeWidth * 2,
         height: baseRadius * 2 + strokeWidth * 2,
         opacity,
+        willChange: isPlaying ? 'transform' : 'auto',
       }}
       animate={controls}
       drag="y"
@@ -111,27 +112,18 @@ export function LoopRing({
         />
 
         {notePositions.map((pos, i) => (
-          <motion.circle
+          <circle
             key={i}
             cx={baseRadius + strokeWidth + pos.x}
             cy={baseRadius + strokeWidth + pos.y}
             r={4}
             fill={loop.color}
-            initial={{ scale: 0 }}
-            animate={{
-              scale: isPlaying ? [1, 1.5, 1] : 1,
-            }}
-            transition={{
-              duration: 0.3,
-              delay: i * 0.05,
-              repeat: isPlaying ? Infinity : 0,
-              repeatDelay: rotationDuration - 0.3,
-            }}
+            opacity={0.9}
           />
         ))}
       </svg>
 
-      <motion.div
+      <div
         className="absolute flex items-center justify-center text-lg select-none"
         style={{
           left: baseRadius + strokeWidth - 12,
@@ -139,16 +131,9 @@ export function LoopRing({
           width: 24,
           height: 24,
         }}
-        animate={{
-          scale: isPlaying ? [1, 1.2, 1] : 1,
-        }}
-        transition={{
-          duration: 0.5,
-          repeat: isPlaying ? Infinity : 0,
-        }}
       >
         {getInstrumentConfig(loop.instrumentType).icon}
-      </motion.div>
+      </div>
     </motion.div>
   )
 }

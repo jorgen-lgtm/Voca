@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { LooperCanvas } from '@/components/looper'
 import { useAuth } from '@/hooks/useAuth'
 import { useProjects } from '@/hooks/useProjects'
+import { AdBanner } from '@/components/ads'
+import { shouldShowAds } from '@/config/limits'
 import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
@@ -135,6 +137,11 @@ export default function HomePage() {
       )}
 
       <LooperCanvas onSave={handleSave} isPro={isPro} />
+
+      {/* Ad Banner for free users */}
+      {shouldShowAds(isPro) && (
+        <AdBanner isPro={isPro} position="bottom" />
+      )}
 
       <AnimatePresence>
         {showSaveModal && (

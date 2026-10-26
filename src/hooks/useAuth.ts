@@ -77,10 +77,9 @@ export function useAuth() {
     await supabase.auth.signOut()
   }
 
-  // Pro features temporarily disabled - everyone gets full access
-  const isPro = true
-  
+  // Check Pro status - admins and users with pro_status get Pro features
   const isAdmin = isAdminEmail(state.user?.email)
+  const isPro = shouldGrantProStatus(state.user?.email, state.profile?.pro_status ?? false) || isAdmin
 
   return {
     ...state,

@@ -7,20 +7,22 @@ import { useAuth } from '@/hooks/useAuth'
 
 const FEATURES = {
   free: [
-    'Unlimited loop recording',
-    'All 9 instruments',
-    '4 concurrent loops',
-    'Save up to 5 projects',
-    'JSON export',
+    'Alla 10 instrument inkl. Memo',
+    'Max 4 loopar samtidigt',
+    'Spara 3 projekt',
+    '1 export per dag',
+    'AI-producent (begränsad)',
+    'Med reklam',
   ],
   pro: [
-    'Everything in Free, plus:',
-    'Unlimited loops',
-    'Unlimited projects',
-    'MIDI export',
-    'High-quality audio export',
-    'Priority support',
-    'Early access to new features',
+    'Allt i Free, plus:',
+    '🎵 Obegränsade loopar',
+    '💾 Obegränsade projekt',
+    '📤 Obegränsad export (MIDI + WAV)',
+    '🤖 Full AI-producent',
+    '🚫 Ingen reklam',
+    '⚡ Prioriterad support',
+    '✨ Tidiga nya funktioner',
   ],
 }
 
@@ -100,13 +102,13 @@ export default function UpgradePage() {
           className="text-center mb-12"
         >
           <h1 className="text-4xl font-bold text-white mb-4">
-            Upgrade to{' '}
+            Uppgradera till{' '}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
               Pro
             </span>
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Unlock the full potential of HumWeave with MIDI export, unlimited projects, and more.
+            Lås upp HumWeaves fulla potential - obegränsade loopar, ingen reklam och professionell export.
           </p>
         </motion.div>
 

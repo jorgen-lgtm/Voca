@@ -20,17 +20,21 @@ export function AdBanner({ isPro, position = 'bottom', className = '' }: AdBanne
     // Don't show ads to Pro users
     if (isPro) return
     
-    // In production with AdSense configured, load the ad
-    if (!AD_CONFIG.testMode && typeof window !== 'undefined') {
+    // In production with AdSense configured, load real ads
+    if (AD_CONFIG.hasRealAds && typeof window !== 'undefined') {
       try {
         // @ts-expect-error - AdSense global
         (window.adsbygoogle = window.adsbygoogle || []).push({})
         setAdLoaded(true)
       } catch (e) {
         console.warn('AdSense not loaded:', e)
+        // Fall back to promo banner
+        if (AD_CONFIG.usePromoBannerAsFallback) {
+          setAdLoaded(true)
+        }
       }
-    } else {
-      // Test mode - show placeholder
+    } else if (AD_CONFIG.usePromoBannerAsFallback) {
+      // Show promotional banner as fallback
       setAdLoaded(true)
     }
   }, [isPro])
@@ -52,7 +56,7 @@ export function AdBanner({ isPro, position = 'bottom', className = '' }: AdBanne
           className={`fixed left-0 right-0 ${positionClasses} z-40 ${className}`}
         >
           <div className="bg-gray-900/95 backdrop-blur-sm border-t border-gray-700/50 px-4 py-2">
-            {AD_CONFIG.testMode ? (
+            {!AD_CONFIG.hasRealAds ? (
               // Placeholder ad for development
               <div className="max-w-4xl mx-auto">
                 <div className="flex items-center justify-between gap-4">

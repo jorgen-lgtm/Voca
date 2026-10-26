@@ -75,7 +75,7 @@ export function InterstitialAd({ isOpen, onClose, isPro }: InterstitialAdProps) 
 
             {/* Ad Content */}
             <div className="p-6">
-              {AD_CONFIG.testMode ? (
+              {!AD_CONFIG.hasRealAds ? (
                 // Placeholder interstitial
                 <div className="text-center">
                   <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-4xl">

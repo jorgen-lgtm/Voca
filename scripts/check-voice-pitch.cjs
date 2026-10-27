@@ -74,22 +74,22 @@ console.log('These tests supply YIN candidates; real microphone/YIN accuracy and
 
 if (process.argv.includes('--with-detector')) {
   const { YIN } = require('pitchfinder')
-  const { VOICE_MIN_RMS, VOICE_YIN_SETTINGS } = require('../src/lib/voice-pitch.ts')
+  const { detectVoiceFrequency, VOICE_YIN_SETTINGS } = require('../src/lib/voice-pitch.ts')
   for (const sampleRate of [44100, 48000]) {
     const detector = YIN({ sampleRate, ...VOICE_YIN_SETTINGS })
-    for (const frequency of [110, 220, 440, 660]) {
+    for (const frequency of [65.4064, 110, 220, 440, 660]) {
       for (const scale of [1, .025]) {
         const samples = frame(frequency, sampleRate).map(value => value * scale)
-        const rms = Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length)
+        const normalized = new Float32Array(samples.length)
         const tracker = new VoicePitchTracker()
         let result
         for (let i = 0; i < 12; i++) {
-          const candidate = rms >= VOICE_MIN_RMS ? detector(samples) : null
+          const candidate = detectVoiceFrequency(samples, normalized, detector)
           result = tracker.update(samples, sampleRate, candidate, i * .02)
         }
         assert.equal(result?.midiNote, Math.round(69 + 12 * Math.log2(frequency / 440)), `YIN -> tracker failed: ${frequency}Hz, ${sampleRate}Hz sample rate, gain ${scale}`)
       }
     }
   }
-  console.log('PASS: installed pitchfinder YIN -> shared microphone level gate -> tracker creates notes for normal and quiet harmonic waveforms at 44.1/48 kHz')
+  console.log('PASS: installed pitchfinder YIN with normalized analysis -> tracker creates notes for normal and quiet harmonic waveforms at 44.1/48 kHz')
 }

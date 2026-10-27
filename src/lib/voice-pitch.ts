@@ -1,7 +1,27 @@
 // Shared by the microphone gate and tracker so quiet, pitched input is not
 // discarded before the detector gets a chance to inspect it.
 export const VOICE_MIN_RMS = 0.0006
-export const VOICE_YIN_SETTINGS = { threshold: 0.2, probabilityThreshold: 0.7 }
+export const VOICE_YIN_SETTINGS = { threshold: 0.15, probabilityThreshold: 0.7 }
+
+// pitchfinder's YIN initializes its first difference term to 1. On quiet,
+// unscaled microphone input that can make the first tiny lag look periodic
+// and produce an ultrasonic candidate. Center and normalize only the analysis
+// copy; never change the recorded signal or playback volume.
+export function detectVoiceFrequency(
+  buffer: Float32Array,
+  normalized: Float32Array,
+  detector: (samples: Float32Array) => number | null,
+): number | null {
+  let mean = 0
+  for (const sample of buffer) mean += sample
+  mean /= buffer.length || 1
+  let energy = 0
+  for (const sample of buffer) energy += (sample - mean) ** 2
+  const rms = Math.sqrt(energy / (buffer.length || 1))
+  if (rms < VOICE_MIN_RMS || !Number.isFinite(rms)) return null
+  for (let i = 0; i < buffer.length; i++) normalized[i] = (buffer[i] - mean) / rms
+  return detector(normalized)
+}
 
 export interface VoicePitch {
   frequency: number

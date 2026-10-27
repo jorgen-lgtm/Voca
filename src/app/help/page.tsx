@@ -64,6 +64,21 @@ export default function HelpPage() {
             </div>
           </section>
 
+          <section className="mb-12 space-y-4" aria-labelledby="singing-guide">
+            <h2 id="singing-guide" className="text-2xl font-semibold text-purple-300">From humming to a usable melody</h2>
+            <p className="text-gray-300">HumWeave transcribes one pitched voice at a time. It estimates the fundamental frequency and converts stable pitches into MIDI notes. It does not transcribe lyrics, chords, or several singers at once. Your instrument changes the playback sound; it does not change which notes you sang.</p>
+            <ol className="list-decimal pl-6 space-y-3 text-gray-300">
+              <li>Use headphones so the backing loop and metronome do not enter the microphone. Start in a quiet room, with the microphone roughly a hand span from your mouth. Avoid blowing directly into it.</li>
+              <li>Choose piano and record a short phrase of three or four sustained notes. Hum on a comfortable vowel or a closed-mouth “mm”. Keep a steady volume and leave a short silence between phrases.</li>
+              <li>Listen back before adding another layer. If extra notes appear, reduce background sound and sing a little more clearly. If notes disappear, move closer without clipping and hold them longer. Very breathy sounds, consonants, and extremely fast ornamentation may not produce stable pitches.</li>
+              <li>Record the same phrase with Memo to keep the original performance. Compare its rhythm and melody with the converted instrument loop. MIDI captures note pitches and timing, not the full expression or sound of your voice.</li>
+              <li>Once the phrase is usable, add accompaniment and export MIDI to a music editor for detailed note and rhythm editing. Keep the Memo recording as a reference.</li>
+            </ol>
+            <h3 className="text-xl font-semibold">What to do when the result sounds wrong</h3>
+            <p className="text-gray-300">An octave error means a harmonic was mistaken for the main pitch. Try a smoother vowel, lower playback volume, and a less breathy tone. Small pitch movement within a held note is normal vibrato; the converter stabilizes it instead of treating every fluctuation as another note. Deliberate note changes must last long enough to be distinguished from these fluctuations.</p>
+            <p className="text-gray-300">Microphone processing differs across phones and browsers. HumWeave requests unprocessed input where supported, but the device may apply its own processing. On iPhone, allow microphone access, keep Safari in the foreground, and make a short test after returning from another app. If conversion is unreliable, save the idea in Memo and enter the intended notes with the keyboard.</p>
+          </section>
+
           {/* Instruments */}
           <section className="mb-12">
             <h2 className="text-2xl font-semibold mb-4 text-purple-300">🎹 Instruments (10 total)</h2>
@@ -129,7 +144,7 @@ export default function HelpPage() {
                   <span className="text-2xl">🗣️</span>
                   <span className="font-semibold">Voice Mode</span>
                 </div>
-                <p className="text-gray-400 text-sm">Speak and melody follows your intonation!</p>
+                <p className="text-gray-400 text-sm">Sing a stable melody to play it with a choir-like instrument.</p>
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4 border border-rose-500/30">
                 <div className="flex items-center gap-3 mb-2">
@@ -262,3 +277,4 @@ export default function HelpPage() {
     </div>
   )
 }
+

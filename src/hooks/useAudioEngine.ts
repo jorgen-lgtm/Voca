@@ -3,13 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
 import * as Pitchfinder from 'pitchfinder'
+import { VoicePitchTracker } from '@/lib/voice-pitch'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
-
-function frequencyToMidi(frequency: number): number {
-  return Math.round(12 * Math.log2(frequency / 440) + 69)
-}
 
 function midiToNoteName(midi: number): string {
   const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -241,8 +238,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
-  const lastDetectedPitchRef = useRef<number | null>(null)
-  const pitchStabilityCountRef = useRef<number>(0)
+  const voiceTrackerRef = useRef(new VoicePitchTracker())
+  const pitchBufferRef = useRef<Float32Array<ArrayBuffer> | null>(null)
   const wasPlayingBeforeRecordRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
@@ -318,12 +315,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Get microphone access with mobile-friendly constraints
       // Simpler constraints work better on mobile
       const audioConstraints = isMobile 
-        ? { audio: true }  // Simple constraint for mobile
+        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }
         : {
             audio: {
               echoCancellation: false,
               noiseSuppression: false,
-              autoGainControl: true,
+              autoGainControl: false,
             },
           }
       
@@ -355,7 +352,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
         threshold: 0.15,        // Balanced sensitivity
-        probabilityThreshold: 0.1  // Accept reasonably certain pitches
+        probabilityThreshold: 0.8  // Accept reasonably certain pitches
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
@@ -407,165 +404,30 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
   }, [tempo])
 
-  // Scale notes for melodic snapping (pentatonic for more pleasing melodies)
-  const PENTATONIC_SCALE = [0, 2, 4, 7, 9] // C D E G A - always sounds good
-  
-  // Voice melody state
-  const voiceBaseNoteRef = useRef<number>(60) // Start at middle C
-  const lastVoiceFreqRef = useRef<number | null>(null)
-  const melodyDirectionRef = useRef<'up' | 'down' | 'steady'>('steady')
-  
-  // Get next note in scale based on direction
-  const getNextScaleNote = useCallback((currentNote: number, direction: 'up' | 'down' | 'steady'): number => {
-    const octave = Math.floor(currentNote / 12)
-    const noteInOctave = currentNote % 12
-    
-    // Find current position in scale
-    let scaleIndex = PENTATONIC_SCALE.findIndex(n => n >= noteInOctave)
-    if (scaleIndex === -1) scaleIndex = 0
-    
-    if (direction === 'up') {
-      scaleIndex++
-      if (scaleIndex >= PENTATONIC_SCALE.length) {
-        return (octave + 1) * 12 + PENTATONIC_SCALE[0] // Next octave
-      }
-      return octave * 12 + PENTATONIC_SCALE[scaleIndex]
-    } else if (direction === 'down') {
-      scaleIndex--
-      if (scaleIndex < 0) {
-        return (octave - 1) * 12 + PENTATONIC_SCALE[PENTATONIC_SCALE.length - 1] // Previous octave
-      }
-      return octave * 12 + PENTATONIC_SCALE[scaleIndex]
-    }
-    return currentNote // steady
-  }, [])
-  
-  // Snap to nearest pentatonic note
-  const snapToScale = useCallback((midiNote: number): number => {
-    const octave = Math.floor(midiNote / 12)
-    const noteInOctave = midiNote % 12
-    
-    let closest = PENTATONIC_SCALE[0]
-    let minDist = 12
-    
-    for (const scaleNote of PENTATONIC_SCALE) {
-      const dist = Math.abs(noteInOctave - scaleNote)
-      if (dist < minDist) {
-        minDist = dist
-        closest = scaleNote
-      }
-    }
-    
-    return octave * 12 + closest
-  }, [])
-
   const detectPitch = useCallback(() => {
-    if (!micEnabledRef.current) {
+    if (!micEnabledRef.current || !analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
+      voiceTrackerRef.current.reset()
       return null
     }
-    
-    if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
-      return null
+    const analyser = analyserRef.current
+    if (!pitchBufferRef.current || pitchBufferRef.current.length !== analyser.fftSize) {
+      pitchBufferRef.current = new Float32Array(analyser.fftSize)
     }
-
-    const bufferLength = analyserRef.current.fftSize
-    const buffer = new Float32Array(bufferLength)
-    analyserRef.current.getFloatTimeDomainData(buffer)
-
-    let rms = 0
-    for (let i = 0; i < buffer.length; i++) {
-      rms += buffer[i] * buffer[i]
-    }
-    rms = Math.sqrt(rms / buffer.length)
-
-    const level = Math.min(rms * 50, 1)
-    setAudioLevel(level)
-
-    const minVolume = 0.003
-    
-    if (rms < minVolume) {
-      lastDetectedPitchRef.current = null
-      pitchStabilityCountRef.current = 0
-      lastVoiceFreqRef.current = null
-      setCurrentPitch(null)
-      return null
-    }
-
-    const frequency = pitchDetectorRef.current(buffer)
-
-    // CONTOUR-BASED MELODY DETECTION for all instruments
-    // Follows the direction of your voice instead of exact pitches
-    // This works much better for singing/humming input
-    
-    // Set octave range based on instrument
-    let minNote = 48 // C3
-    let maxNote = 72 // C5
-    if (currentInstrument === 'bass') {
-      minNote = 28 // E1
-      maxNote = 48 // C3
-    } else if (currentInstrument === 'guitar') {
-      minNote = 40 // E2
-      maxNote = 64 // E4
-    }
-    
-    let melodyNote: number
-    
-    if (frequency && frequency > 60 && frequency < 800) {
-      // Detect direction of pitch change
-      if (lastVoiceFreqRef.current !== null) {
-        const freqDiff = frequency - lastVoiceFreqRef.current
-        const threshold = 12 // Hz difference to count as direction change
-        
-        if (freqDiff > threshold) {
-          melodyDirectionRef.current = 'up'
-        } else if (freqDiff < -threshold) {
-          melodyDirectionRef.current = 'down'
-        } else {
-          melodyDirectionRef.current = 'steady'
-        }
-      }
-      lastVoiceFreqRef.current = frequency
-      
-      // Move melody note based on direction
-      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, melodyDirectionRef.current)
-      
-      // Keep melody in instrument's range
-      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
-      voiceBaseNoteRef.current = melodyNote
-      
-    } else if (rms > 0.01) {
-      // No clear pitch but sound detected - small movement
-      const variation = Math.random() > 0.5 ? 'up' : 'down'
-      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, rms > 0.05 ? variation : 'steady')
-      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
-      voiceBaseNoteRef.current = melodyNote
-    } else {
-      return null
-    }
-    
-    // Only trigger if note changed
-    if (lastDetectedPitchRef.current !== melodyNote) {
-      lastDetectedPitchRef.current = melodyNote
-      
-      const noteName = midiToNoteName(melodyNote)
-      const result: PitchDetectionResult = {
-        frequency,
-        clarity: Math.min(rms * 20, 1),
-        midiNote: melodyNote,
-        noteName,
-      }
-      setCurrentPitch(result)
-      return result
-    }
-    
-    setCurrentPitch({
-      frequency,
-      clarity: Math.min(rms * 20, 1),
-      midiNote: lastDetectedPitchRef.current,
-      noteName: lastDetectedPitchRef.current ? midiToNoteName(lastDetectedPitchRef.current) : null,
-    })
-    return null
-  }, [currentInstrument, getNextScaleNote])
+    const buffer = pitchBufferRef.current
+    analyser.getFloatTimeDomainData(buffer)
+    let energy = 0
+    for (const value of buffer) energy += value * value
+    const rms = Math.sqrt(energy / buffer.length)
+    setAudioLevel(Math.min(rms * 50, 1))
+    const frequency = rms >= 0.004 ? pitchDetectorRef.current(buffer) : null
+    const pitch = voiceTrackerRef.current.update(buffer, audioContextRef.current.sampleRate, frequency, Tone.now())
+    const result: PitchDetectionResult | null = pitch ? {
+      ...pitch,
+      noteName: midiToNoteName(pitch.midiNote),
+    } : null
+    setCurrentPitch(result)
+    return result
+  }, [])
 
   const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
     const instrument = instrumentsRef.current.get(currentInstrument)
@@ -653,6 +515,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     recordingNotesRef.current = []
+    voiceTrackerRef.current.reset()
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
     isRecordingRef.current = true
@@ -727,7 +590,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
                 pitch: lastNoteRef.current.midi,
                 velocity: 100,
                 startTime: lastNoteRef.current.startTime,
-                duration: Math.max(duration, 0.1),
+                duration: Math.max(duration, 0),
               })
             }
 
@@ -740,7 +603,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             pitch: lastNoteRef.current.midi,
             velocity: 100,
             startTime: lastNoteRef.current.startTime,
-            duration: Math.max(duration, 0.1),
+            duration: Math.max(duration, 0),
           })
           lastNoteRef.current = null
         }
@@ -826,7 +689,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         pitch: lastNoteRef.current.midi,
         velocity: 100,
         startTime: lastNoteRef.current.startTime,
-        duration: Math.max(duration, 0.1),
+        duration: Math.max(duration, 0),
       })
     }
 
@@ -846,57 +709,11 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       recordingDuration = masterLoopDurationRef.current!
     }
 
-    // AUTO AI ENHANCEMENT - clean up notes automatically
-    let cleanedNotes = [...recordingNotesRef.current]
-    
-    // Skip AI for drums and memos - they don't need melodic cleanup
-    if (currentInstrument !== 'drums' && currentInstrument !== 'memo') {
-      // 1. Remove very short notes (noise)
-      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.08)
-      
-      // 2. Remove outlier notes (jumps > octave from neighbors)
-      if (cleanedNotes.length >= 3) {
-        const sorted = cleanedNotes.sort((a, b) => a.startTime - b.startTime)
-        cleanedNotes = sorted.filter((note, i) => {
-          const prev = i > 0 ? sorted[i - 1] : null
-          const next = i < sorted.length - 1 ? sorted[i + 1] : null
-          const prevDiff = prev ? Math.abs(note.pitch - prev.pitch) : 0
-          const nextDiff = next ? Math.abs(note.pitch - next.pitch) : 0
-          // Remove if jumps > octave from both neighbors
-          if (prev && next && prevDiff > 12 && nextDiff > 12) return false
-          // Remove short notes that jump far
-          if (note.duration < 0.12 && (prevDiff > 7 || nextDiff > 7)) return false
-          return true
-        })
-      }
-      
-      // 3. Consolidate consecutive similar notes
-      if (cleanedNotes.length >= 2) {
-        const consolidated: MidiNote[] = []
-        let i = 0
-        while (i < cleanedNotes.length) {
-          const current = { ...cleanedNotes[i] }
-          let j = i + 1
-          while (j < cleanedNotes.length) {
-            const next = cleanedNotes[j]
-            const gap = next.startTime - (current.startTime + current.duration)
-            const pitchDiff = Math.abs(next.pitch - current.pitch)
-            if (pitchDiff <= 2 && gap < 0.2 && gap > -0.1) {
-              current.duration = (next.startTime + next.duration) - current.startTime
-              j++
-            } else {
-              break
-            }
-          }
-          consolidated.push(current)
-          i = j
-        }
-        cleanedNotes = consolidated
-      }
-      
-      // 4. Final filter - minimum duration
-      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.1)
-    }
+    // Preserve the sung melody: no forced scale, interval removal, or merging
+    // of different pitches. The tracker handles unstable input before recording.
+    const cleanedNotes = currentInstrument === 'drums'
+      ? [...recordingNotesRef.current]
+      : recordingNotesRef.current.filter(note => note.duration >= 0.08)
 
     const config = getInstrumentConfig(currentInstrument)
     
@@ -1336,4 +1153,5 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     updateLoops,
   }
 }
+
 

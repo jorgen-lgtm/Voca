@@ -1,3 +1,8 @@
+// Shared by the microphone gate and tracker so quiet, pitched input is not
+// discarded before the detector gets a chance to inspect it.
+export const VOICE_MIN_RMS = 0.0006
+export const VOICE_YIN_SETTINGS = { threshold: 0.2, probabilityThreshold: 0.7 }
+
 export interface VoicePitch {
   frequency: number
   midiNote: number
@@ -26,7 +31,7 @@ export class VoicePitchTracker {
     for (const value of buffer) energy += (value - mean) ** 2
     const rms = Math.sqrt(energy / (buffer.length || 1))
     let clarity = 0
-    if (frequency && Number.isFinite(frequency) && frequency >= 65 && frequency <= 1200 && rms >= 0.004) {
+    if (frequency && Number.isFinite(frequency) && frequency >= 65 && frequency <= 1200 && rms >= VOICE_MIN_RMS) {
       const lag = Math.round(sampleRate / frequency)
       let correlation = 0, left = 0, right = 0
       for (let i = 0; i < buffer.length - lag; i++) {
@@ -37,7 +42,7 @@ export class VoicePitchTracker {
       }
       clarity = correlation / Math.sqrt(left * right || 1)
     }
-    if (!frequency || !Number.isFinite(frequency) || clarity < 0.8) {
+    if (!frequency || !Number.isFinite(frequency) || clarity < 0.65) {
       this.candidate = null
       if (now - this.lastVoiced <= 0.07) return this.held
       this.held = null
@@ -47,7 +52,9 @@ export class VoicePitchTracker {
     const exactMidi = 69 + 12 * Math.log2(frequency / 440)
     // Stay on the held note through normal tuning drift/vibrato.
     const midiNote = this.held && Math.abs(exactMidi - this.held.midiNote) < 0.7
-      ? this.held.midiNote : Math.round(exactMidi)
+      ? this.held.midiNote
+      : this.candidate !== null && Math.abs(exactMidi - this.candidate) < 0.75
+        ? this.candidate : Math.round(exactMidi)
     if (this.held?.midiNote === midiNote) {
       this.candidate = null
       this.held = { frequency, midiNote, clarity }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
 import * as Pitchfinder from 'pitchfinder'
-import { VoicePitchTracker } from '@/lib/voice-pitch'
+import { VoicePitchTracker, VOICE_MIN_RMS, VOICE_YIN_SETTINGS } from '@/lib/voice-pitch'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
@@ -315,12 +315,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Get microphone access with mobile-friendly constraints
       // Simpler constraints work better on mobile
       const audioConstraints = isMobile 
-        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }
+        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }
         : {
             audio: {
               echoCancellation: false,
               noiseSuppression: false,
-              autoGainControl: false,
+              autoGainControl: true,
             },
           }
       
@@ -351,8 +351,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       const sampleRate = audioContextRef.current.sampleRate
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
-        threshold: 0.15,        // Balanced sensitivity
-        probabilityThreshold: 0.8  // Accept reasonably certain pitches
+        ...VOICE_YIN_SETTINGS
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
@@ -419,7 +418,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     for (const value of buffer) energy += value * value
     const rms = Math.sqrt(energy / buffer.length)
     setAudioLevel(Math.min(rms * 50, 1))
-    const frequency = rms >= 0.004 ? pitchDetectorRef.current(buffer) : null
+    const frequency = rms >= VOICE_MIN_RMS ? pitchDetectorRef.current(buffer) : null
     const pitch = voiceTrackerRef.current.update(buffer, audioContextRef.current.sampleRate, frequency, Tone.now())
     const result: PitchDetectionResult | null = pitch ? {
       ...pitch,

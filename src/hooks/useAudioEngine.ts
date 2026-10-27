@@ -82,10 +82,15 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
 
 type InstrumentSynth = Tone.PolySynth | Tone.Sampler
 
-function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume): InstrumentSynth {
+function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume, effects: Tone.ToneAudioNode[]): InstrumentSynth {
   // Simple, reliable effects chain
   const limiter = new Tone.Limiter(-3).connect(masterVolume)
-  const reverb = new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(limiter)
+  const reverbSettings = type === 'piano' ? { decay: 1.8, wet: 0.22 }
+    : type === 'strings' ? { decay: 2.5, wet: 0.3 }
+    : type === 'voice' ? { decay: 2, wet: 0.25 }
+    : { decay: 1.2, wet: 0.15 }
+  const reverb = new Tone.Reverb(reverbSettings).connect(limiter)
+  effects.push(reverb, limiter)
   
   const baseVolume = -12
   
@@ -109,8 +114,8 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'piano': {
       // Soft hammer piano: triangle + long ringing decay (clearly not a pluck)
-      const pianoReverb = new Tone.Reverb({ decay: 1.8, wet: 0.22 }).connect(limiter)
-      const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(pianoReverb)
+      const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(reverb)
+      effects.push(pianoFilter)
       const synth = new Tone.PolySynth(Tone.Synth).connect(pianoFilter)
       synth.maxPolyphony = 6
       synth.set({
@@ -123,6 +128,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     case 'guitar': {
       // Nylon-ish pluck: sawtooth through a tighter filter + short decay
       const guitarFilter = new Tone.Filter({ type: 'lowpass', frequency: 2400, Q: 1.4 }).connect(reverb)
+      effects.push(guitarFilter)
       const synth = new Tone.PolySynth(Tone.Synth).connect(guitarFilter)
       synth.maxPolyphony = 6
       synth.set({
@@ -134,8 +140,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'strings': {
       // Soft strings
-      const stringsReverb = new Tone.Reverb({ decay: 2.5, wet: 0.3 }).connect(limiter)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(stringsReverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
         oscillator: { type: 'sawtooth' },
@@ -168,8 +173,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'voice': {
       // Soft voice/choir
-      const voiceReverb = new Tone.Reverb({ decay: 2, wet: 0.25 }).connect(limiter)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(voiceReverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'sine' },
@@ -229,6 +233,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const pitchDetectorRef = useRef<((buffer: Float32Array) => number | null) | null>(null)
   const instrumentsRef = useRef<Map<InstrumentType, InstrumentSynth>>(new Map())
+  const instrumentEffectsRef = useRef<Tone.ToneAudioNode[]>([])
   const drumKitRef = useRef<DrumKit | null>(null)
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
@@ -372,7 +377,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Create all instruments immediately (synths are fast to create)
       const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
       allInstruments.forEach(type => {
-        const synth = createInstrumentSynth(type, masterVolumeRef.current!)
+        const synth = createInstrumentSynth(type, masterVolumeRef.current!, instrumentEffectsRef.current)
         instrumentsRef.current.set(type, synth)
       })
       console.log('All instruments created')
@@ -1274,6 +1279,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         cancelAnimationFrame(animationFrameRef.current)
       }
       instrumentsRef.current.forEach((instrument) => instrument?.dispose())
+      instrumentsRef.current.clear()
+      instrumentEffectsRef.current.forEach((effect) => effect.dispose())
+      instrumentEffectsRef.current = []
       if (drumKitRef.current) {
         drumKitRef.current.kick.dispose()
         drumKitRef.current.snare.dispose()
@@ -1328,3 +1336,4 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     updateLoops,
   }
 }
+

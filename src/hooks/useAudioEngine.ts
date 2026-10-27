@@ -108,25 +108,28 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
       return synth as unknown as InstrumentSynth
     }
     case 'piano': {
-      // Clean piano sound
-      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      // Soft hammer piano: triangle + long ringing decay (clearly not a pluck)
+      const pianoReverb = new Tone.Reverb({ decay: 1.8, wet: 0.22 }).connect(limiter)
+      const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(pianoReverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(pianoFilter)
       synth.maxPolyphony = 6
       synth.set({
         oscillator: { type: 'triangle' },
-        envelope: { attack: 0.002, decay: 1.0, sustain: 0.1, release: 1.0 },
+        envelope: { attack: 0.002, decay: 1.5, sustain: 0.04, release: 1.3 },
       })
       synth.volume.value = baseVolume
       return synth
     }
     case 'guitar': {
-      // Plucky guitar
-      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
+      // Nylon-ish pluck: sawtooth through a tighter filter + short decay
+      const guitarFilter = new Tone.Filter({ type: 'lowpass', frequency: 2400, Q: 1.4 }).connect(reverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(guitarFilter)
       synth.maxPolyphony = 6
       synth.set({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.005, decay: 0.4, sustain: 0.1, release: 0.5 },
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.008, decay: 0.32, sustain: 0.12, release: 0.4 },
       })
-      synth.volume.value = baseVolume
+      synth.volume.value = baseVolume - 1
       return synth
     }
     case 'strings': {

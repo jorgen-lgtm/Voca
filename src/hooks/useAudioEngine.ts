@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
 import * as Pitchfinder from 'pitchfinder'
-import { VoicePitchTracker } from '@/lib/voice-pitch'
+import { VoicePitchTracker, detectVoiceFrequency, VOICE_YIN_SETTINGS } from '@/lib/voice-pitch'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
@@ -240,6 +240,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const isRecordingRef = useRef<boolean>(false)
   const voiceTrackerRef = useRef(new VoicePitchTracker())
   const pitchBufferRef = useRef<Float32Array<ArrayBuffer> | null>(null)
+  const normalizedPitchBufferRef = useRef<Float32Array | null>(null)
   const wasPlayingBeforeRecordRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
@@ -315,12 +316,12 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Get microphone access with mobile-friendly constraints
       // Simpler constraints work better on mobile
       const audioConstraints = isMobile 
-        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }
+        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }
         : {
             audio: {
               echoCancellation: false,
               noiseSuppression: false,
-              autoGainControl: false,
+              autoGainControl: true,
             },
           }
       
@@ -351,8 +352,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       const sampleRate = audioContextRef.current.sampleRate
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
-        threshold: 0.15,        // Balanced sensitivity
-        probabilityThreshold: 0.8  // Accept reasonably certain pitches
+        ...VOICE_YIN_SETTINGS
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
@@ -412,6 +412,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     const analyser = analyserRef.current
     if (!pitchBufferRef.current || pitchBufferRef.current.length !== analyser.fftSize) {
       pitchBufferRef.current = new Float32Array(analyser.fftSize)
+      normalizedPitchBufferRef.current = new Float32Array(analyser.fftSize)
     }
     const buffer = pitchBufferRef.current
     analyser.getFloatTimeDomainData(buffer)
@@ -419,7 +420,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     for (const value of buffer) energy += value * value
     const rms = Math.sqrt(energy / buffer.length)
     setAudioLevel(Math.min(rms * 50, 1))
-    const frequency = rms >= 0.004 ? pitchDetectorRef.current(buffer) : null
+    const frequency = detectVoiceFrequency(buffer, normalizedPitchBufferRef.current!, pitchDetectorRef.current)
     const pitch = voiceTrackerRef.current.update(buffer, audioContextRef.current.sampleRate, frequency, Tone.now())
     const result: PitchDetectionResult | null = pitch ? {
       ...pitch,

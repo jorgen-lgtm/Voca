@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { authorizeAiRequest } from '@/lib/ai-spend-guard'
 
 function getOpenAI() {
   return new OpenAI({
@@ -28,12 +29,20 @@ export async function POST(request: NextRequest) {
       style?: string
     }
 
-    if (!notes || notes.length === 0) {
+    if (!Array.isArray(notes) || notes.length === 0 || notes.length > 64
+      || !notes.every(n => n && Number.isInteger(n.pitch) && n.pitch >= 0 && n.pitch <= 127
+        && Number.isFinite(n.startTime) && n.startTime >= 0 && n.startTime <= 600
+        && Number.isFinite(n.duration) && n.duration > 0 && n.duration <= 30)
+      || !Number.isFinite(tempo) || tempo < 40 || tempo > 240
+      || (style !== undefined && (typeof style !== 'string' || style.length > 80))) {
       return NextResponse.json(
-        { error: 'No notes provided' },
+        { error: 'Invalid melody input' },
         { status: 400 }
       )
     }
+
+    const blocked = await authorizeAiRequest('melody')
+    if (blocked) return blocked
 
     const noteNames = notes.map(n => midiToNoteName(n.pitch)).join(', ')
     
@@ -60,6 +69,7 @@ Svara endast med JSON: { "notes": [{ "pitch": number, "startTime": number, "dura
       ],
       response_format: { type: 'json_object' },
       temperature: 0.8,
+      max_completion_tokens: 300,
     })
 
     const response = completion.choices[0].message.content

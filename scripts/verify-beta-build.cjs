@@ -5,8 +5,9 @@ function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' })
   if (result.status !== 0) process.exit(result.status || 1)
 }
+run('npm', ['ci', '--ignore-scripts', '--include=dev'])
 run('npm', ['install', '--no-save', '--package-lock=false', '--ignore-scripts', '--include=dev', '@electric-sql/pglite@0.3.14'])
-const audit = spawnSync('npm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+const audit = spawnSync('npm', ['audit', '--package-lock-only', '--json'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
 try {
   const data = JSON.parse(audit.stdout)
   console.log('AUDIT_SUMMARY', JSON.stringify(data.metadata?.vulnerabilities))

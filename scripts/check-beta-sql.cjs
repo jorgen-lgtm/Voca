@@ -45,6 +45,14 @@ async function main() {
   check((await save([], 2, '40000000-0000-4000-8000-000000000006')).rows[0].revision, 3)
   check((await db.query('SELECT count(*)::int AS n FROM public.tracks')).rows[0].n, 0)
 
+  const edited = [{ ...data[0], midi_data: { ...data[0].midi_data, volume: .2, notes: [{ pitch: 64, velocity: 90, startTime: 0, duration: .5 }] } }]
+  check((await save(edited, 3, '40000000-0000-4000-8000-000000000007', 90)).rows[0].revision, 4)
+  const reopened = (await db.query('SELECT midi_data FROM public.tracks')).rows[0].midi_data
+  check(reopened.notes[0].pitch, 64); check(reopened.volume, .2)
+  await db.exec(`DELETE FROM public.projects WHERE id='${project}'`)
+  check((await db.query('SELECT count(*)::int AS n FROM public.projects')).rows[0].n, 0)
+  check((await db.query('SELECT count(*)::int AS n FROM public.tracks')).rows[0].n, 0)
+
   await db.exec('RESET ROLE; SET ROLE service_role;')
   const reserve = (id = a, daily = 10, cap = 100000) => db.query('SELECT public.reserve_ai_request($1,$2,20000,$3,$4) AS allowed', [id, 'melody', cap, daily])
   const attempts = await Promise.all(Array.from({ length: 30 }, (_, i) => reserve(i % 2 ? a : b)))

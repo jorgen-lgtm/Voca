@@ -5,6 +5,11 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Node test/build scripts intentionally use CommonJS; browser code keeps the import rule.
+  {
+    files: ['scripts/**/*.cjs', 'scripts/generate-icons.js'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -16,3 +21,4 @@ const eslintConfig = defineConfig([
 ]);
 
 export default eslintConfig;
+

@@ -45,6 +45,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     masterLoopDuration,
     loopProgress,
     initializeAudio,
+    initializeOutput,
     startRecording,
     stopRecording,
     togglePlayback,
@@ -475,7 +476,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               isInitialized={state.isInitialized}
               onPress={canAddMoreLoops ? startRecording : undefined}
               onRelease={stopRecording}
-              onInitialize={initializeAudio}
+              onInitialize={() => micEnabled || currentInstrument === 'memo' ? initializeAudio() : initializeOutput()}
               disabled={loopsAtLimit && state.isInitialized}
             />
           </div>

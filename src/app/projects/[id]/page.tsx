@@ -47,9 +47,9 @@ function ProjectPageContent() {
     }
   }, [user, projectId, loadProject, convertTracksToLoops])
 
-  const handleSave = async (newLoops: RecordedLoop[], _tempo: number) => {
+  const handleSave = async (newLoops: RecordedLoop[], tempo: number) => {
     if (!currentProject) return
-    await saveLoopsToProject(currentProject.id, newLoops)
+    await saveLoopsToProject(currentProject.id, newLoops, tempo)
   }
 
   const handleTitleSave = async () => {
@@ -58,7 +58,7 @@ function ProjectPageContent() {
     setIsEditing(false)
   }
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && !currentProject)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <motion.div
@@ -70,7 +70,7 @@ function ProjectPageContent() {
     )
   }
 
-  if (error) {
+  if (error && !currentProject) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <motion.div
@@ -104,6 +104,7 @@ function ProjectPageContent() {
 
   return (
     <main className="relative min-h-screen">
+      {error && <p role="alert" className="relative z-30 bg-red-950 p-3 text-red-100">{error}</p>}
       <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
         <motion.button
           onClick={() => router.push('/projects')}
@@ -195,3 +196,4 @@ export default function ProjectPage() {
     </Suspense>
   )
 }
+

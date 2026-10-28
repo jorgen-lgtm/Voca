@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@magenta/music": "^1.23.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "@tensorflow/tfjs": "^4.22.0",

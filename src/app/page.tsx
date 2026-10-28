@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LooperCanvas } from '@/components/looper'
@@ -8,6 +8,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProjects } from '@/hooks/useProjects'
 import { AdBanner } from '@/components/ads'
 import { shouldShowAds } from '@/config/limits'
+import { FREE_BETA_MODE } from '@/config/beta'
+import { buildProjectSnapshot } from '@/lib/project-snapshot'
 import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
@@ -19,6 +21,9 @@ export default function HomePage() {
   const [pendingLoops, setPendingLoops] = useState<RecordedLoop[]>([])
   const [pendingTempo, setPendingTempo] = useState(120)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
+  const confirmingSaveRef = useRef(false)
   const router = useRouter()
 
   const handleSave = async (loops: RecordedLoop[], tempo: number) => {
@@ -27,6 +32,8 @@ export default function HomePage() {
       return
     }
 
+    setPendingProjectId(null)
+    setSnapshotError(null)
     setPendingLoops(loops)
     setPendingTempo(tempo)
     setProjectTitle(`Loop Session ${new Date().toLocaleDateString('sv-SE')}`)
@@ -34,11 +41,19 @@ export default function HomePage() {
   }
 
   const handleConfirmSave = async () => {
+    if (confirmingSaveRef.current) return
+    confirmingSaveRef.current = true
+    try {
     if (!projectTitle.trim()) return
 
-    const project = await createProject(projectTitle.trim(), pendingTempo, isPro)
+    try { buildProjectSnapshot('', pendingLoops) } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : 'Cannot save project')
+      return
+    }
+    const project = pendingProjectId ? { id: pendingProjectId } : await createProject(projectTitle.trim(), pendingTempo, isPro)
     if (project) {
-      const success = await saveLoopsToProject(project.id, pendingLoops)
+      setPendingProjectId(project.id)
+      const success = await saveLoopsToProject(project.id, pendingLoops, pendingTempo)
       if (success) {
         setSaveSuccess(true)
         setTimeout(() => {
@@ -47,6 +62,9 @@ export default function HomePage() {
           setProjectTitle('')
         }, 1500)
       }
+    }
+    } finally {
+      confirmingSaveRef.current = false
     }
   }
 
@@ -75,9 +93,9 @@ export default function HomePage() {
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-medium">
               {user.email?.[0].toUpperCase()}
             </div>
-            {isPro && (
+            {(FREE_BETA_MODE || isPro) && (
               <span className="text-xs bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-2 py-0.5 rounded-full">
-                PRO
+                {FREE_BETA_MODE ? 'BETA' : 'PRO'}
               </span>
             )}
           </motion.button>
@@ -93,7 +111,7 @@ export default function HomePage() {
                   {user.email}
                 </div>
                 <div className="text-xs text-gray-400">
-                  {isPro ? 'Pro Member' : 'Free Plan'}
+                  {FREE_BETA_MODE ? 'Free Beta' : isPro ? 'Pro Member' : 'Free Plan'}
                 </div>
               </div>
               <div className="py-1">
@@ -103,7 +121,7 @@ export default function HomePage() {
                 >
                   My Projects
                 </button>
-                {!isPro && (
+                {!FREE_BETA_MODE && !isPro && (
                   <button
                     onClick={() => router.push('/upgrade')}
                     className="w-full px-4 py-2 text-left text-sm text-yellow-400 hover:bg-gray-700/50"
@@ -139,7 +157,7 @@ export default function HomePage() {
       <LooperCanvas onSave={handleSave} isPro={isPro} />
 
       {/* Ad Banner for free users */}
-      {shouldShowAds(isPro) && (
+      {!FREE_BETA_MODE && shouldShowAds(isPro) && (
         <AdBanner isPro={isPro} position="bottom" />
       )}
 
@@ -216,10 +234,11 @@ export default function HomePage() {
                       <span>{pendingTempo} BPM</span>
                     </div>
 
+                    {snapshotError && <p role="alert" className="text-red-300">{snapshotError}</p>}
                     {saveError && (
                       <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30">
                         <p className="text-sm text-red-300">{saveError}</p>
-                        {saveError.includes('limit') && !isPro && (
+                        {saveError.includes('limit') && !FREE_BETA_MODE && !isPro && (
                           <button
                             onClick={() => router.push('/upgrade')}
                             className="mt-2 text-xs font-medium text-purple-400 hover:text-purple-300"
@@ -271,3 +290,4 @@ export default function HomePage() {
     </main>
   )
 }
+

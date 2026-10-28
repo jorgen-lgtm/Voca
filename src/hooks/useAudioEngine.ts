@@ -3,13 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Tone from 'tone'
 import * as Pitchfinder from 'pitchfinder'
+import { VoicePitchTracker, detectVoiceFrequency, VOICE_YIN_SETTINGS } from '@/lib/voice-pitch'
 import type { InstrumentType, MidiNote } from '@/types/database'
 import type { AudioEngineState, PitchDetectionResult, RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
-
-function frequencyToMidi(frequency: number): number {
-  return Math.round(12 * Math.log2(frequency / 440) + 69)
-}
 
 function midiToNoteName(midi: number): string {
   const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -22,6 +19,7 @@ type DrumKit = {
   kick: Tone.MembraneSynth
   snare: Tone.NoiseSynth
   hihat: Tone.MetalSynth
+  effects: Tone.ToneAudioNode[]
 }
 
 const DRUM_MIDI_MAP: Record<string, number> = {
@@ -77,15 +75,20 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
   }).connect(drumEQ)
   hihat.volume.value = drumBaseVolume - 3
 
-  return { kick, snare, hihat }
+  return { kick, snare, hihat, effects: [drumEQ, drumLimiter, drumCompressor] }
 }
 
 type InstrumentSynth = Tone.PolySynth | Tone.Sampler
 
-function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume): InstrumentSynth {
+function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume, effects: Tone.ToneAudioNode[]): InstrumentSynth {
   // Simple, reliable effects chain
   const limiter = new Tone.Limiter(-3).connect(masterVolume)
-  const reverb = new Tone.Reverb({ decay: 1.2, wet: 0.15 }).connect(limiter)
+  const reverbSettings = type === 'piano' ? { decay: 1.8, wet: 0.22 }
+    : type === 'strings' ? { decay: 2.5, wet: 0.3 }
+    : type === 'voice' ? { decay: 2, wet: 0.25 }
+    : { decay: 1.2, wet: 0.15 }
+  const reverb = new Tone.Reverb(reverbSettings).connect(limiter)
+  effects.push(reverb, limiter)
   
   const baseVolume = -12
   
@@ -109,8 +112,8 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'piano': {
       // Soft hammer piano: triangle + long ringing decay (clearly not a pluck)
-      const pianoReverb = new Tone.Reverb({ decay: 1.8, wet: 0.22 }).connect(limiter)
-      const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(pianoReverb)
+      const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(reverb)
+      effects.push(pianoFilter)
       const synth = new Tone.PolySynth(Tone.Synth).connect(pianoFilter)
       synth.maxPolyphony = 6
       synth.set({
@@ -123,6 +126,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     case 'guitar': {
       // Nylon-ish pluck: sawtooth through a tighter filter + short decay
       const guitarFilter = new Tone.Filter({ type: 'lowpass', frequency: 2400, Q: 1.4 }).connect(reverb)
+      effects.push(guitarFilter)
       const synth = new Tone.PolySynth(Tone.Synth).connect(guitarFilter)
       synth.maxPolyphony = 6
       synth.set({
@@ -134,8 +138,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'strings': {
       // Soft strings
-      const stringsReverb = new Tone.Reverb({ decay: 2.5, wet: 0.3 }).connect(limiter)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(stringsReverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 6
       synth.set({
         oscillator: { type: 'sawtooth' },
@@ -168,8 +171,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume):
     }
     case 'voice': {
       // Soft voice/choir
-      const voiceReverb = new Tone.Reverb({ decay: 2, wet: 0.25 }).connect(limiter)
-      const synth = new Tone.PolySynth(Tone.Synth).connect(voiceReverb)
+      const synth = new Tone.PolySynth(Tone.Synth).connect(reverb)
       synth.maxPolyphony = 4
       synth.set({
         oscillator: { type: 'sine' },
@@ -219,9 +221,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
-  const [masterLoopDuration, setMasterLoopDuration] = useState<number | null>(null)
+  const initialDuration = initialLoops.length ? Math.max(...initialLoops.map(loop => loop.duration)) : null
+  const [masterLoopDuration, setMasterLoopDuration] = useState<number | null>(initialDuration)
   const [loopProgress, setLoopProgress] = useState<number>(0)
-  const masterLoopDurationRef = useRef<number | null>(null)
+  const masterLoopDurationRef = useRef<number | null>(initialDuration)
   const [loadingInstruments] = useState<Set<InstrumentType>>(new Set())
 
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -229,6 +232,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const pitchDetectorRef = useRef<((buffer: Float32Array) => number | null) | null>(null)
   const instrumentsRef = useRef<Map<InstrumentType, InstrumentSynth>>(new Map())
+  const instrumentEffectsRef = useRef<Tone.ToneAudioNode[]>([])
   const drumKitRef = useRef<DrumKit | null>(null)
   const masterVolumeRef = useRef<Tone.Volume | null>(null)
   const recordingNotesRef = useRef<MidiNote[]>([])
@@ -236,8 +240,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const lastNoteRef = useRef<{ midi: number; startTime: number } | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const isRecordingRef = useRef<boolean>(false)
-  const lastDetectedPitchRef = useRef<number | null>(null)
-  const pitchStabilityCountRef = useRef<number>(0)
+  const voiceTrackerRef = useRef(new VoicePitchTracker())
+  const pitchBufferRef = useRef<Float32Array<ArrayBuffer> | null>(null)
+  const normalizedPitchBufferRef = useRef<Float32Array | null>(null)
   const wasPlayingBeforeRecordRef = useRef<boolean>(false)
   const loopPartRef = useRef<Tone.Part | null>(null)
   const transportCallbackIdRef = useRef<number | null>(null)
@@ -251,6 +256,47 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const memoAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
+
+  const initializeOutput = useCallback(async () => {
+    try {
+      await Tone.start()
+      if (masterVolumeRef.current) {
+        if (Tone.getContext().state !== 'running') await Tone.getContext().resume()
+        return true
+      }
+    // Create master volume
+    masterVolumeRef.current = new Tone.Volume(0).toDestination()
+    console.log('Master volume created')
+
+    // Create metronome
+    metronomeSynthRef.current = new Tone.Synth({
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
+    }).toDestination()
+    metronomeSynthRef.current.volume.value = -12
+
+    // Create drum kit
+    drumKitRef.current = createDrumKit(masterVolumeRef.current)
+    console.log('Drum kit created')
+
+    // Create all instruments immediately (synths are fast to create)
+    const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
+    allInstruments.forEach(type => {
+      const synth = createInstrumentSynth(type, masterVolumeRef.current!, instrumentEffectsRef.current)
+      instrumentsRef.current.set(type, synth)
+    })
+    console.log('All instruments created')
+
+    // Set tempo
+    Tone.getTransport().bpm.value = tempo
+    setState(prev => ({ ...prev, isInitialized: true }))
+
+      return true
+    } catch (error) {
+      console.warn('Could not start audio output:', error)
+      return false
+    }
+  }, [tempo])
 
   const initializeAudio = useCallback(async () => {
     if (isInitializedRef.current) {
@@ -269,6 +315,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     try {
+      if (!await initializeOutput()) return false
       console.log('Starting audio initialization...')
       
       // Check for microphone support first
@@ -313,7 +360,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       // Get microphone access with mobile-friendly constraints
       // Simpler constraints work better on mobile
       const audioConstraints = isMobile 
-        ? { audio: true }  // Simple constraint for mobile
+        ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } }
         : {
             audio: {
               echoCancellation: false,
@@ -349,36 +396,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       const sampleRate = audioContextRef.current.sampleRate
       pitchDetectorRef.current = Pitchfinder.YIN({ 
         sampleRate, 
-        threshold: 0.15,        // Balanced sensitivity
-        probabilityThreshold: 0.1  // Accept reasonably certain pitches
+        ...VOICE_YIN_SETTINGS
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
-
-      // Create master volume
-      masterVolumeRef.current = new Tone.Volume(0).toDestination()
-      console.log('Master volume created')
-
-      // Create metronome
-      metronomeSynthRef.current = new Tone.Synth({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
-      }).toDestination()
-      metronomeSynthRef.current.volume.value = -12
-
-      // Create drum kit
-      drumKitRef.current = createDrumKit(masterVolumeRef.current)
-      console.log('Drum kit created')
-
-      // Create all instruments immediately (synths are fast to create)
-      const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
-      allInstruments.forEach(type => {
-        const synth = createInstrumentSynth(type, masterVolumeRef.current!)
-        instrumentsRef.current.set(type, synth)
-      })
-      console.log('All instruments created')
-
-      // Set tempo
-      Tone.getTransport().bpm.value = tempo
 
       isInitializedRef.current = true
       setState((prev) => ({ ...prev, isInitialized: true }))
@@ -400,169 +420,36 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       return false
     }
-  }, [tempo])
-
-  // Scale notes for melodic snapping (pentatonic for more pleasing melodies)
-  const PENTATONIC_SCALE = [0, 2, 4, 7, 9] // C D E G A - always sounds good
-  
-  // Voice melody state
-  const voiceBaseNoteRef = useRef<number>(60) // Start at middle C
-  const lastVoiceFreqRef = useRef<number | null>(null)
-  const melodyDirectionRef = useRef<'up' | 'down' | 'steady'>('steady')
-  
-  // Get next note in scale based on direction
-  const getNextScaleNote = useCallback((currentNote: number, direction: 'up' | 'down' | 'steady'): number => {
-    const octave = Math.floor(currentNote / 12)
-    const noteInOctave = currentNote % 12
-    
-    // Find current position in scale
-    let scaleIndex = PENTATONIC_SCALE.findIndex(n => n >= noteInOctave)
-    if (scaleIndex === -1) scaleIndex = 0
-    
-    if (direction === 'up') {
-      scaleIndex++
-      if (scaleIndex >= PENTATONIC_SCALE.length) {
-        return (octave + 1) * 12 + PENTATONIC_SCALE[0] // Next octave
-      }
-      return octave * 12 + PENTATONIC_SCALE[scaleIndex]
-    } else if (direction === 'down') {
-      scaleIndex--
-      if (scaleIndex < 0) {
-        return (octave - 1) * 12 + PENTATONIC_SCALE[PENTATONIC_SCALE.length - 1] // Previous octave
-      }
-      return octave * 12 + PENTATONIC_SCALE[scaleIndex]
-    }
-    return currentNote // steady
-  }, [])
-  
-  // Snap to nearest pentatonic note
-  const snapToScale = useCallback((midiNote: number): number => {
-    const octave = Math.floor(midiNote / 12)
-    const noteInOctave = midiNote % 12
-    
-    let closest = PENTATONIC_SCALE[0]
-    let minDist = 12
-    
-    for (const scaleNote of PENTATONIC_SCALE) {
-      const dist = Math.abs(noteInOctave - scaleNote)
-      if (dist < minDist) {
-        minDist = dist
-        closest = scaleNote
-      }
-    }
-    
-    return octave * 12 + closest
-  }, [])
+  }, [tempo, initializeOutput])
 
   const detectPitch = useCallback(() => {
-    if (!micEnabledRef.current) {
+    if (!micEnabledRef.current || !analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
+      voiceTrackerRef.current.reset()
       return null
     }
-    
-    if (!analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
-      return null
+    const analyser = analyserRef.current
+    if (!pitchBufferRef.current || pitchBufferRef.current.length !== analyser.fftSize) {
+      pitchBufferRef.current = new Float32Array(analyser.fftSize)
+      normalizedPitchBufferRef.current = new Float32Array(analyser.fftSize)
     }
+    const buffer = pitchBufferRef.current
+    analyser.getFloatTimeDomainData(buffer)
+    let energy = 0
+    for (const value of buffer) energy += value * value
+    const rms = Math.sqrt(energy / buffer.length)
+    setAudioLevel(Math.min(rms * 50, 1))
+    const frequency = detectVoiceFrequency(buffer, normalizedPitchBufferRef.current!, pitchDetectorRef.current)
+    const pitch = voiceTrackerRef.current.update(buffer, audioContextRef.current.sampleRate, frequency, Tone.now())
+    const result: PitchDetectionResult | null = pitch ? {
+      ...pitch,
+      noteName: midiToNoteName(pitch.midiNote),
+    } : null
+    setCurrentPitch(result)
+    return result
+  }, [])
 
-    const bufferLength = analyserRef.current.fftSize
-    const buffer = new Float32Array(bufferLength)
-    analyserRef.current.getFloatTimeDomainData(buffer)
-
-    let rms = 0
-    for (let i = 0; i < buffer.length; i++) {
-      rms += buffer[i] * buffer[i]
-    }
-    rms = Math.sqrt(rms / buffer.length)
-
-    const level = Math.min(rms * 50, 1)
-    setAudioLevel(level)
-
-    const minVolume = 0.003
-    
-    if (rms < minVolume) {
-      lastDetectedPitchRef.current = null
-      pitchStabilityCountRef.current = 0
-      lastVoiceFreqRef.current = null
-      setCurrentPitch(null)
-      return null
-    }
-
-    const frequency = pitchDetectorRef.current(buffer)
-
-    // CONTOUR-BASED MELODY DETECTION for all instruments
-    // Follows the direction of your voice instead of exact pitches
-    // This works much better for singing/humming input
-    
-    // Set octave range based on instrument
-    let minNote = 48 // C3
-    let maxNote = 72 // C5
-    if (currentInstrument === 'bass') {
-      minNote = 28 // E1
-      maxNote = 48 // C3
-    } else if (currentInstrument === 'guitar') {
-      minNote = 40 // E2
-      maxNote = 64 // E4
-    }
-    
-    let melodyNote: number
-    
-    if (frequency && frequency > 60 && frequency < 800) {
-      // Detect direction of pitch change
-      if (lastVoiceFreqRef.current !== null) {
-        const freqDiff = frequency - lastVoiceFreqRef.current
-        const threshold = 12 // Hz difference to count as direction change
-        
-        if (freqDiff > threshold) {
-          melodyDirectionRef.current = 'up'
-        } else if (freqDiff < -threshold) {
-          melodyDirectionRef.current = 'down'
-        } else {
-          melodyDirectionRef.current = 'steady'
-        }
-      }
-      lastVoiceFreqRef.current = frequency
-      
-      // Move melody note based on direction
-      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, melodyDirectionRef.current)
-      
-      // Keep melody in instrument's range
-      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
-      voiceBaseNoteRef.current = melodyNote
-      
-    } else if (rms > 0.01) {
-      // No clear pitch but sound detected - small movement
-      const variation = Math.random() > 0.5 ? 'up' : 'down'
-      melodyNote = getNextScaleNote(voiceBaseNoteRef.current, rms > 0.05 ? variation : 'steady')
-      melodyNote = Math.max(minNote, Math.min(maxNote, melodyNote))
-      voiceBaseNoteRef.current = melodyNote
-    } else {
-      return null
-    }
-    
-    // Only trigger if note changed
-    if (lastDetectedPitchRef.current !== melodyNote) {
-      lastDetectedPitchRef.current = melodyNote
-      
-      const noteName = midiToNoteName(melodyNote)
-      const result: PitchDetectionResult = {
-        frequency,
-        clarity: Math.min(rms * 20, 1),
-        midiNote: melodyNote,
-        noteName,
-      }
-      setCurrentPitch(result)
-      return result
-    }
-    
-    setCurrentPitch({
-      frequency,
-      clarity: Math.min(rms * 20, 1),
-      midiNote: lastDetectedPitchRef.current,
-      noteName: lastDetectedPitchRef.current ? midiToNoteName(lastDetectedPitchRef.current) : null,
-    })
-    return null
-  }, [currentInstrument, getNextScaleNote])
-
-  const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
+  const triggerNote = useCallback(async (midiNote: number, duration: number = 0.3) => {
+    if (!await initializeOutput()) return
     const instrument = instrumentsRef.current.get(currentInstrument)
     if (instrument && 'triggerAttackRelease' in instrument) {
       const noteName = midiToNoteName(midiNote)
@@ -572,10 +459,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         console.warn('Failed to trigger note:', e)
       }
     }
-  }, [currentInstrument])
+  }, [currentInstrument, initializeOutput])
 
-  const triggerDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
-    if (!drumKitRef.current) return
+  const triggerDrumHit = useCallback(async (drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
+    if (!await initializeOutput() || !drumKitRef.current) return
 
     try {
       switch (drumType) {
@@ -592,7 +479,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     } catch (e) {
       console.warn('Failed to trigger drum hit:', e)
     }
-  }, [])
+  }, [initializeOutput])
 
   const recordDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat') => {
     if (!isRecordingRef.current) return
@@ -630,11 +517,124 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     })
   }, [triggerNote])
 
-  const startRecording = useCallback(async () => {
-    if (!state.isInitialized) {
-      const success = await initializeAudio()
-      if (!success) return
+  const stopRecordingInternal = useCallback((): RecordedLoop | null => {
+    if (!isRecordingRef.current) return null
+
+    isRecordingRef.current = false
+    setState((prev) => ({ ...prev, isRecording: false }))
+    setLoopProgress(0)
+
+    if (masterVolumeRef.current) {
+      masterVolumeRef.current.volume.rampTo(0, 0.1)
     }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+    }
+
+    let recordingDuration = Tone.now() - recordingStartTimeRef.current
+
+    // MEMO MODE: Handle audio recording
+    if (currentInstrument === 'memo' && mediaRecorderRef.current) {
+      const recorder = mediaRecorderRef.current
+      
+      // Stop the recorder and wait for final data
+      recorder.stop()
+      
+      // Create the loop asynchronously when all data is collected
+      const loopId = crypto.randomUUID()
+      const config = getInstrumentConfig('memo')
+      
+      // Handle the recorded data
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        console.log('Memo recording complete:', audioBlob.size, 'bytes')
+        
+        // Determine duration
+        const finalDuration = masterLoopDurationRef.current || recordingDuration
+        if (!masterLoopDurationRef.current) {
+          masterLoopDurationRef.current = recordingDuration
+          setMasterLoopDuration(recordingDuration)
+        }
+        
+        const memoLoop: RecordedLoop = {
+          id: loopId,
+          instrumentType: 'memo',
+          notes: [], // Memos don't have MIDI notes
+          duration: finalDuration,
+          color: config.color,
+          volume: 1,
+          audioBlob,
+          audioUrl,
+        }
+        
+        // Create audio element for playback
+        const audio = new Audio(audioUrl)
+        audio.loop = true
+        memoAudioElementsRef.current.set(loopId, audio)
+        
+        setLoops((prev) => [...prev, memoLoop])
+      }
+      
+      mediaRecorderRef.current = null
+      return null // Loop will be added asynchronously
+    }
+
+    if (lastNoteRef.current) {
+      const currentTime = Tone.now() - recordingStartTimeRef.current
+      const duration = currentTime - lastNoteRef.current.startTime
+      recordingNotesRef.current.push({
+        pitch: lastNoteRef.current.midi,
+        velocity: 100,
+        startTime: lastNoteRef.current.startTime,
+        duration: Math.max(duration, 0),
+      })
+    }
+
+    if (recordingNotesRef.current.length === 0) {
+      return null
+    }
+
+    // If this is the first loop, it sets the master duration
+    // Otherwise, use the master duration
+    const isFirstLoop = masterLoopDurationRef.current === null
+    if (isFirstLoop) {
+      // First loop - set it as master
+      masterLoopDurationRef.current = recordingDuration
+      setMasterLoopDuration(recordingDuration)
+    } else {
+      // Subsequent loops - use master duration
+      recordingDuration = masterLoopDurationRef.current!
+    }
+
+    // Preserve the sung melody: no forced scale, interval removal, or merging
+    // of different pitches. The tracker handles unstable input before recording.
+    const cleanedNotes = currentInstrument === 'drums'
+      ? [...recordingNotesRef.current]
+      : recordingNotesRef.current.filter(note => note.duration >= 0.08)
+
+    const config = getInstrumentConfig(currentInstrument)
+    
+    const newLoop: RecordedLoop = {
+      id: crypto.randomUUID(),
+      instrumentType: currentInstrument,
+      notes: cleanedNotes,
+      duration: recordingDuration,
+      color: config.color,
+      volume: 1,
+    }
+
+    setLoops((prev) => [...prev, newLoop])
+    
+    return newLoop
+  }, [currentInstrument])
+
+  const startRecording = useCallback(async () => {
+    const ready = micEnabledRef.current || currentInstrument === 'memo'
+      ? await initializeAudio() : await initializeOutput()
+    if (!ready) return
 
     // Ensure audio context is running (mobile fix)
     if (Tone.getContext().state !== 'running') {
@@ -648,6 +648,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     recordingNotesRef.current = []
+    voiceTrackerRef.current.reset()
     recordingStartTimeRef.current = Tone.now()
     lastNoteRef.current = null
     isRecordingRef.current = true
@@ -722,7 +723,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
                 pitch: lastNoteRef.current.midi,
                 velocity: 100,
                 startTime: lastNoteRef.current.startTime,
-                duration: Math.max(duration, 0.1),
+                duration: Math.max(duration, 0),
               })
             }
 
@@ -735,7 +736,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
             pitch: lastNoteRef.current.midi,
             velocity: 100,
             startTime: lastNoteRef.current.startTime,
-            duration: Math.max(duration, 0.1),
+            duration: Math.max(duration, 0),
           })
           lastNoteRef.current = null
         }
@@ -747,167 +748,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     analyzeLoop()
-  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio])
-
-  const stopRecordingInternal = useCallback((): RecordedLoop | null => {
-    if (!isRecordingRef.current) return null
-
-    isRecordingRef.current = false
-    setState((prev) => ({ ...prev, isRecording: false }))
-    setLoopProgress(0)
-
-    if (masterVolumeRef.current) {
-      masterVolumeRef.current.volume.rampTo(0, 0.1)
-    }
-
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-    }
-
-    let recordingDuration = Tone.now() - recordingStartTimeRef.current
-
-    // MEMO MODE: Handle audio recording
-    if (currentInstrument === 'memo' && mediaRecorderRef.current) {
-      const recorder = mediaRecorderRef.current
-      
-      // Stop the recorder and wait for final data
-      recorder.stop()
-      
-      // Create the loop asynchronously when all data is collected
-      const loopId = crypto.randomUUID()
-      const config = getInstrumentConfig('memo')
-      
-      // Handle the recorded data
-      recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
-        const audioUrl = URL.createObjectURL(audioBlob)
-        
-        console.log('Memo recording complete:', audioBlob.size, 'bytes')
-        
-        // Determine duration
-        const finalDuration = masterLoopDurationRef.current || recordingDuration
-        if (!masterLoopDurationRef.current) {
-          masterLoopDurationRef.current = recordingDuration
-          setMasterLoopDuration(recordingDuration)
-        }
-        
-        const memoLoop: RecordedLoop = {
-          id: loopId,
-          instrumentType: 'memo',
-          notes: [], // Memos don't have MIDI notes
-          duration: finalDuration,
-          color: config.color,
-          volume: 1,
-          audioBlob,
-          audioUrl,
-        }
-        
-        // Create audio element for playback
-        const audio = new Audio(audioUrl)
-        audio.loop = true
-        memoAudioElementsRef.current.set(loopId, audio)
-        
-        setLoops((prev) => [...prev, memoLoop])
-      }
-      
-      mediaRecorderRef.current = null
-      return null // Loop will be added asynchronously
-    }
-
-    if (lastNoteRef.current) {
-      const currentTime = Tone.now() - recordingStartTimeRef.current
-      const duration = currentTime - lastNoteRef.current.startTime
-      recordingNotesRef.current.push({
-        pitch: lastNoteRef.current.midi,
-        velocity: 100,
-        startTime: lastNoteRef.current.startTime,
-        duration: Math.max(duration, 0.1),
-      })
-    }
-
-    if (recordingNotesRef.current.length === 0) {
-      return null
-    }
-
-    // If this is the first loop, it sets the master duration
-    // Otherwise, use the master duration
-    const isFirstLoop = masterLoopDurationRef.current === null
-    if (isFirstLoop) {
-      // First loop - set it as master
-      masterLoopDurationRef.current = recordingDuration
-      setMasterLoopDuration(recordingDuration)
-    } else {
-      // Subsequent loops - use master duration
-      recordingDuration = masterLoopDurationRef.current!
-    }
-
-    // AUTO AI ENHANCEMENT - clean up notes automatically
-    let cleanedNotes = [...recordingNotesRef.current]
-    
-    // Skip AI for drums and memos - they don't need melodic cleanup
-    if (currentInstrument !== 'drums' && currentInstrument !== 'memo') {
-      // 1. Remove very short notes (noise)
-      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.08)
-      
-      // 2. Remove outlier notes (jumps > octave from neighbors)
-      if (cleanedNotes.length >= 3) {
-        const sorted = cleanedNotes.sort((a, b) => a.startTime - b.startTime)
-        cleanedNotes = sorted.filter((note, i) => {
-          const prev = i > 0 ? sorted[i - 1] : null
-          const next = i < sorted.length - 1 ? sorted[i + 1] : null
-          const prevDiff = prev ? Math.abs(note.pitch - prev.pitch) : 0
-          const nextDiff = next ? Math.abs(note.pitch - next.pitch) : 0
-          // Remove if jumps > octave from both neighbors
-          if (prev && next && prevDiff > 12 && nextDiff > 12) return false
-          // Remove short notes that jump far
-          if (note.duration < 0.12 && (prevDiff > 7 || nextDiff > 7)) return false
-          return true
-        })
-      }
-      
-      // 3. Consolidate consecutive similar notes
-      if (cleanedNotes.length >= 2) {
-        const consolidated: MidiNote[] = []
-        let i = 0
-        while (i < cleanedNotes.length) {
-          const current = { ...cleanedNotes[i] }
-          let j = i + 1
-          while (j < cleanedNotes.length) {
-            const next = cleanedNotes[j]
-            const gap = next.startTime - (current.startTime + current.duration)
-            const pitchDiff = Math.abs(next.pitch - current.pitch)
-            if (pitchDiff <= 2 && gap < 0.2 && gap > -0.1) {
-              current.duration = (next.startTime + next.duration) - current.startTime
-              j++
-            } else {
-              break
-            }
-          }
-          consolidated.push(current)
-          i = j
-        }
-        cleanedNotes = consolidated
-      }
-      
-      // 4. Final filter - minimum duration
-      cleanedNotes = cleanedNotes.filter(n => n.duration >= 0.1)
-    }
-
-    const config = getInstrumentConfig(currentInstrument)
-    
-    const newLoop: RecordedLoop = {
-      id: crypto.randomUUID(),
-      instrumentType: currentInstrument,
-      notes: cleanedNotes,
-      duration: recordingDuration,
-      color: config.color,
-      volume: 1,
-    }
-
-    setLoops((prev) => [...prev, newLoop])
-    
-    return newLoop
-  }, [currentInstrument])
+  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio, initializeOutput, stopRecordingInternal])
 
   const stopRecording = useCallback((): RecordedLoop | null => {
     return stopRecordingInternal()
@@ -954,7 +795,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const startPlayback = useCallback(async () => {
-    if (loops.length === 0) return
+    if (loops.length === 0 || !await initializeOutput()) return
 
     // Ensure audio context is running
     if (Tone.getContext().state !== 'running') {
@@ -1008,7 +849,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     // Sort events by time for proper scheduling
     allEvents.sort((a, b) => a.time - b.time)
     
-    const maxDuration = Math.max(...loops.map((l) => l.duration), 4)
+    const maxDuration = Math.max(...loops.map((l) => l.duration))
     console.log(`Loop duration: ${maxDuration}s, MIDI events: ${allEvents.length}`)
 
     // Start memo audio loops
@@ -1064,7 +905,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     transport.start()
 
     setState((prev) => ({ ...prev, isPlaying: true }))
-  }, [loops, playDrumNote, releaseAllNotes])
+  }, [loops, playDrumNote, releaseAllNotes, initializeOutput])
 
   const stopPlayback = useCallback(() => {
     const transport = Tone.getTransport()
@@ -1274,10 +1115,14 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         cancelAnimationFrame(animationFrameRef.current)
       }
       instrumentsRef.current.forEach((instrument) => instrument?.dispose())
+      instrumentsRef.current.clear()
+      instrumentEffectsRef.current.forEach((effect) => effect.dispose())
+      instrumentEffectsRef.current = []
       if (drumKitRef.current) {
         drumKitRef.current.kick.dispose()
         drumKitRef.current.snare.dispose()
         drumKitRef.current.hihat.dispose()
+        drumKitRef.current.effects.forEach(effect => effect.dispose())
       }
       if (loopPartRef.current) {
         loopPartRef.current.dispose()
@@ -1305,6 +1150,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     masterLoopDuration,
     loopProgress,
     initializeAudio,
+    initializeOutput,
     startRecording,
     stopRecording,
     startPlayback,
@@ -1328,3 +1174,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     updateLoops,
   }
 }
+
+
+

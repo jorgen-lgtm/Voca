@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, useAnimation, PanInfo } from 'framer-motion'
+import { motion, useAnimation, useDragControls, PanInfo } from 'framer-motion'
 import { useEffect, useRef, useCallback } from 'react'
 import type { RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
@@ -25,6 +25,8 @@ export function LoopRing({
   onDelete,
 }: LoopRingProps) {
   const controls = useAnimation()
+  const dragControls = useDragControls()
+  const didDragRef = useRef(false)
   const ringRef = useRef<HTMLDivElement>(null)
   
   const baseRadius = 100 + index * 35
@@ -54,10 +56,16 @@ export function LoopRing({
     }
   }
 
+  // Only the stroke and icon initiate a drag; empty ring interiors stay transparent.
+  const handlePointerDown = (event: React.PointerEvent) => {
+    didDragRef.current = false
+    dragControls.start(event)
+  }
+
   // Handle click on the ring itself
   const handleRingClick = useCallback((e: React.MouseEvent | React.PointerEvent) => {
     e.stopPropagation()
-    onSelect()
+    if (!didDragRef.current) onSelect()
   }, [onSelect])
 
   const notePositions = loop.notes.map((note) => {
@@ -83,6 +91,9 @@ export function LoopRing({
       }}
       animate={controls}
       drag="y"
+      dragControls={dragControls}
+      dragListener={false}
+      onDragStart={() => { didDragRef.current = true }}
       dragConstraints={{ top: 0, bottom: 0 }}
       dragElastic={0.3}
       onDragEnd={handleDragEnd}
@@ -115,9 +126,9 @@ export function LoopRing({
           fill="none"
           stroke="transparent"
           strokeWidth={hitAreaWidth}
-          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+          style={{ pointerEvents: 'stroke', cursor: 'pointer', touchAction: 'none' }}
           onClick={handleRingClick}
-          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDown={handlePointerDown}
         />
 
         {/* Visible ring */}
@@ -156,11 +167,14 @@ export function LoopRing({
           width: 24,
           height: 24,
           pointerEvents: 'auto',
+          touchAction: 'none',
         }}
         onClick={handleRingClick}
+        onPointerDown={handlePointerDown}
       >
         {getInstrumentConfig(loop.instrumentType).icon}
       </div>
     </motion.div>
   )
 }
+

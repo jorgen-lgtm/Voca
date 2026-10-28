@@ -12,18 +12,18 @@ export const AD_CONFIG = {
   },
   
   // Ad display settings
-  showAdsToFreeUsers: true,
+  showAdsToFreeUsers: false,
   bannerPosition: 'bottom' as const,
   
   // Interstitial frequency (show after X loops recorded)
   interstitialFrequency: 5,
   
   // Use promotional banner (upgrade to Pro) as fallback when no ad slots configured
-  usePromoBannerAsFallback: true,
+  usePromoBannerAsFallback: false,
   
-  // Real AdSense ads enabled - publisher ID is now configured
-  // Will show real ads when ad slots are also configured
-  hasRealAds: !!(process.env.NEXT_PUBLIC_AD_SLOT_BANNER),
+  // Paused pending publisher-content and placement review.
+  // Environment variables alone must never re-enable Google ads.
+  hasRealAds: false,
 }
 
 // Check if user should see ads
@@ -34,6 +34,7 @@ export function shouldShowAds(isPro: boolean): boolean {
 
 // Check if interstitial should show
 export function shouldShowInterstitial(loopCount: number, isPro: boolean): boolean {
-  if (isPro) return false
-  return loopCount > 0 && loopCount % AD_CONFIG.interstitialFrequency === 0
+  void loopCount
+  void isPro
+  return false
 }

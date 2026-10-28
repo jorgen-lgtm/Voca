@@ -93,7 +93,9 @@ export function exportLoopsToMidi(loops: RecordedLoop[], tempo: number): Uint8Ar
   const tracks: number[][] = []
 
   loops.forEach((loop, index) => {
-    const trackData = createTrackData(loop.notes, tempo, index % 16)
+    const melodicChannels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]
+    const channel = loop.instrumentType === 'drums' ? 9 : melodicChannels[index % melodicChannels.length]
+    const trackData = createTrackData(loop.notes, tempo, channel)
     const trackChunk = [...MIDI_TRACK_HEADER, ...write32bit(trackData.length), ...trackData]
     tracks.push(trackChunk)
   })
@@ -154,3 +156,4 @@ export function downloadJsonFile(json: string, filename: string = 'humweave-expo
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+

@@ -71,7 +71,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
   const loopsAtLimit = loops.length >= maxLoops
 
   const handleSave = () => {
-    if (onSave && loops.length > 0) {
+    if (onSave && (loops.length > 0 || initialLoops !== undefined)) {
       onSave(loops, state.tempo)
     }
   }
@@ -596,6 +596,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         isPlaying={state.isPlaying}
         tempo={state.tempo}
         hasLoops={loops.length > 0}
+        canSaveEmpty={initialLoops !== undefined}
         onTogglePlay={togglePlayback}
         onTempoChange={setTempo}
         onSave={handleSave}
@@ -643,3 +644,4 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     </div>
   )
 }
+

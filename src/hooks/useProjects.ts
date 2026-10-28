@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { buildProjectSnapshot } from '@/lib/project-snapshot'
 import type { MidiData, InstrumentType } from '@/types/database'
 import type { RecordedLoop } from '@/types/audio'
 import { getInstrumentConfig } from '@/config/instruments'
@@ -12,6 +13,7 @@ interface Project {
   user_id: string
   title: string
   tempo: number
+  revision: number
   created_at: string
 }
 
@@ -34,7 +36,9 @@ export function useProjects() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+  const revisionsRef = useRef(new Map<string, number>())
+  const savingRef = useRef(false)
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
@@ -112,34 +116,38 @@ export function useProjects() {
 
   const saveLoopsToProject = useCallback(async (
     projectId: string,
-    loops: RecordedLoop[]
+    loops: RecordedLoop[],
+    tempo: number = 120
   ): Promise<boolean> => {
+    if (savingRef.current) return false
+    savingRef.current = true
     setLoading(true)
     setError(null)
-
-    const tracksToInsert = loops.map((loop) => ({
-      project_id: projectId,
-      instrument_type: loop.instrumentType,
-      midi_data: {
-        notes: loop.notes,
-        duration: loop.duration,
-        volume: loop.volume,
-      } as MidiData,
-      is_muted: false,
-    }))
-
-    const { error: insertError } = await supabase
-      .from('tracks')
-      .insert(tracksToInsert as never)
-
-    if (insertError) {
-      setError(insertError.message)
-      setLoading(false)
+    try {
+      const tracks = buildProjectSnapshot(projectId, loops)
+      const { data, error: saveError } = await supabase.rpc('save_project_snapshot' as never, {
+        p_project_id: projectId,
+        p_tracks: tracks,
+        p_tempo: tempo,
+        p_expected_revision: revisionsRef.current.get(projectId) ?? 0,
+        p_save_id: crypto.randomUUID(),
+      } as never)
+      if (saveError) {
+        throw new Error(saveError.code === '40001'
+          ? 'This project changed in another tab. Your edits remain here; reload the project separately before replacing them.'
+          : 'Could not save. Your edits remain here and existing tracks were not replaced. ' + saveError.message)
+      }
+      if (!Number.isSafeInteger(data) || Number(data) < 0) throw new Error('Invalid save response. Reload before retrying.')
+      revisionsRef.current.set(projectId, Number(data))
+      setCurrentProject(prev => prev?.id === projectId ? { ...prev, tempo, revision: Number(data) } : prev)
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save project')
       return false
+    } finally {
+      savingRef.current = false
+      setLoading(false)
     }
-
-    setLoading(false)
-    return true
   }, [supabase])
 
   const loadProject = useCallback(async (projectId: string): Promise<ProjectWithTracks | null> => {
@@ -162,6 +170,7 @@ export function useProjects() {
     }
 
     const project = data as unknown as ProjectWithTracks
+    revisionsRef.current.set(projectId, project.revision ?? 0)
     setCurrentProject(project)
     setLoading(false)
     return project
@@ -219,7 +228,7 @@ export function useProjects() {
       notes: track.midi_data.notes,
       duration: track.midi_data.duration,
       color: getInstrumentColor(track.instrument_type),
-      volume: track.midi_data.volume ?? 1,
+      volume: track.is_muted ? 0 : track.midi_data.volume ?? 1,
     }))
   }, [])
 
@@ -241,3 +250,4 @@ export function useProjects() {
 function getInstrumentColor(type: InstrumentType): string {
   return getInstrumentConfig(type).color
 }
+

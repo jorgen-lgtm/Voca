@@ -34,6 +34,7 @@ export function GenreStudio({ loops, tempo, duration, disabled, canAdd, onAdd }:
   const controls = 'w-full p-2 rounded-lg bg-gray-900 border border-gray-600 text-white text-sm disabled:opacity-50'
 
   function makeInput(): GenreRequest {
+    if (genre === 'auto' && !source) throw new Error('Spela in ett MIDI-spår först så att AI har ett musikaliskt underlag för genrevalet.')
     if (action === 'improve' && !source) throw new Error('Spela in ett MIDI-spår att förbättra först.')
     const actualPart = action === 'improve' && source
       ? source.instrumentType === 'drums' ? 'drums' : source.instrumentType === 'bass' ? 'bass'

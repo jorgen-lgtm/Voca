@@ -10,12 +10,12 @@ function load(file, mocks = {}) {
   source = source.replace(/import \{([^}]+)\} from ['"]([^'"]+)['"];?/g, (_, names, id) => `const {${names}} = require('${id}')`)
     .replace(/import (\w+) from ['"]([^'"]+)['"];?/g, (_, name, id) => `const ${name} = require('${id}')`)
     .replace(/\bexport /g, '')
-  const module = { exports: {} }
+  const loaded = { exports: {} }
   vm.runInThisContext(`(function(require,module){${source}\nmodule.exports = {${names.join(',')}};})`, { filename: file })(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id]
     throw new Error(`Unexpected dependency ${id}`)
-  }, module)
-  return module.exports
+  }, loaded)
+  return loaded.exports
 }
 
 async function main() {

@@ -49,9 +49,9 @@ CREATE POLICY "Users can view their own profile"
     ON users FOR SELECT
     USING (auth.uid() = id);
 
-CREATE POLICY "Users can update their own profile"
-    ON users FOR UPDATE
-    USING (auth.uid() = id);
+-- Profile entitlements such as pro_status must only be changed by trusted backend operations.
+-- Do not give authenticated clients an UPDATE policy on users.
+-- Admin/service_role updates bypass RLS when using the service role.
 
 CREATE POLICY "Users can insert their own profile"
     ON users FOR INSERT

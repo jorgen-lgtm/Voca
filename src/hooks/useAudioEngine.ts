@@ -19,6 +19,7 @@ type DrumKit = {
   kick: Tone.MembraneSynth
   snare: Tone.NoiseSynth
   hihat: Tone.MetalSynth
+  effects: Tone.ToneAudioNode[]
 }
 
 const DRUM_MIDI_MAP: Record<string, number> = {
@@ -74,7 +75,7 @@ function createDrumKit(masterVolume: Tone.Volume): DrumKit {
   }).connect(drumEQ)
   hihat.volume.value = drumBaseVolume - 3
 
-  return { kick, snare, hihat }
+  return { kick, snare, hihat, effects: [drumEQ, drumLimiter, drumCompressor] }
 }
 
 type InstrumentSynth = Tone.PolySynth | Tone.Sampler
@@ -220,9 +221,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const [lastDrumType, setLastDrumType] = useState<'kick' | 'snare' | 'hihat' | null>(null)
   const [loops, setLoops] = useState<RecordedLoop[]>(initialLoops)
   const [currentInstrument, setCurrentInstrument] = useState<InstrumentType>('piano')
-  const [masterLoopDuration, setMasterLoopDuration] = useState<number | null>(null)
+  const initialDuration = initialLoops.length ? Math.max(...initialLoops.map(loop => loop.duration)) : null
+  const [masterLoopDuration, setMasterLoopDuration] = useState<number | null>(initialDuration)
   const [loopProgress, setLoopProgress] = useState<number>(0)
-  const masterLoopDurationRef = useRef<number | null>(null)
+  const masterLoopDurationRef = useRef<number | null>(initialDuration)
   const [loadingInstruments] = useState<Set<InstrumentType>>(new Set())
 
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -255,6 +257,47 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   const audioChunksRef = useRef<Blob[]>([])
   const memoAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map())
 
+  const initializeOutput = useCallback(async () => {
+    try {
+      await Tone.start()
+      if (masterVolumeRef.current) {
+        if (Tone.getContext().state !== 'running') await Tone.getContext().resume()
+        return true
+      }
+    // Create master volume
+    masterVolumeRef.current = new Tone.Volume(0).toDestination()
+    console.log('Master volume created')
+
+    // Create metronome
+    metronomeSynthRef.current = new Tone.Synth({
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
+    }).toDestination()
+    metronomeSynthRef.current.volume.value = -12
+
+    // Create drum kit
+    drumKitRef.current = createDrumKit(masterVolumeRef.current)
+    console.log('Drum kit created')
+
+    // Create all instruments immediately (synths are fast to create)
+    const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
+    allInstruments.forEach(type => {
+      const synth = createInstrumentSynth(type, masterVolumeRef.current!, instrumentEffectsRef.current)
+      instrumentsRef.current.set(type, synth)
+    })
+    console.log('All instruments created')
+
+    // Set tempo
+    Tone.getTransport().bpm.value = tempo
+    setState(prev => ({ ...prev, isInitialized: true }))
+
+      return true
+    } catch (error) {
+      console.warn('Could not start audio output:', error)
+      return false
+    }
+  }, [tempo])
+
   const initializeAudio = useCallback(async () => {
     if (isInitializedRef.current) {
       // Even if initialized, ensure contexts are running (mobile can suspend them)
@@ -272,6 +315,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     try {
+      if (!await initializeOutput()) return false
       console.log('Starting audio initialization...')
       
       // Check for microphone support first
@@ -356,32 +400,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       })
       console.log('YIN pitch detector initialized with sample rate:', sampleRate)
 
-      // Create master volume
-      masterVolumeRef.current = new Tone.Volume(0).toDestination()
-      console.log('Master volume created')
-
-      // Create metronome
-      metronomeSynthRef.current = new Tone.Synth({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
-      }).toDestination()
-      metronomeSynthRef.current.volume.value = -12
-
-      // Create drum kit
-      drumKitRef.current = createDrumKit(masterVolumeRef.current)
-      console.log('Drum kit created')
-
-      // Create all instruments immediately (synths are fast to create)
-      const allInstruments: InstrumentType[] = ['bass', 'piano', 'guitar', 'synth', 'strings', 'brass', 'organ', 'voice']
-      allInstruments.forEach(type => {
-        const synth = createInstrumentSynth(type, masterVolumeRef.current!, instrumentEffectsRef.current)
-        instrumentsRef.current.set(type, synth)
-      })
-      console.log('All instruments created')
-
-      // Set tempo
-      Tone.getTransport().bpm.value = tempo
-
       isInitializedRef.current = true
       setState((prev) => ({ ...prev, isInitialized: true }))
       console.log('Audio initialization complete!')
@@ -402,7 +420,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       
       return false
     }
-  }, [tempo])
+  }, [tempo, initializeOutput])
 
   const detectPitch = useCallback(() => {
     if (!micEnabledRef.current || !analyserRef.current || !audioContextRef.current || !pitchDetectorRef.current) {
@@ -430,7 +448,8 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     return result
   }, [])
 
-  const triggerNote = useCallback((midiNote: number, duration: number = 0.3) => {
+  const triggerNote = useCallback(async (midiNote: number, duration: number = 0.3) => {
+    if (!await initializeOutput()) return
     const instrument = instrumentsRef.current.get(currentInstrument)
     if (instrument && 'triggerAttackRelease' in instrument) {
       const noteName = midiToNoteName(midiNote)
@@ -440,10 +459,10 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         console.warn('Failed to trigger note:', e)
       }
     }
-  }, [currentInstrument])
+  }, [currentInstrument, initializeOutput])
 
-  const triggerDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
-    if (!drumKitRef.current) return
+  const triggerDrumHit = useCallback(async (drumType: 'kick' | 'snare' | 'hihat' = 'snare') => {
+    if (!await initializeOutput() || !drumKitRef.current) return
 
     try {
       switch (drumType) {
@@ -460,7 +479,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     } catch (e) {
       console.warn('Failed to trigger drum hit:', e)
     }
-  }, [])
+  }, [initializeOutput])
 
   const recordDrumHit = useCallback((drumType: 'kick' | 'snare' | 'hihat') => {
     if (!isRecordingRef.current) return
@@ -499,10 +518,9 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [triggerNote])
 
   const startRecording = useCallback(async () => {
-    if (!state.isInitialized) {
-      const success = await initializeAudio()
-      if (!success) return
-    }
+    const ready = micEnabledRef.current || currentInstrument === 'memo'
+      ? await initializeAudio() : await initializeOutput()
+    if (!ready) return
 
     // Ensure audio context is running (mobile fix)
     if (Tone.getContext().state !== 'running') {
@@ -616,7 +634,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     analyzeLoop()
-  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio])
+  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio, initializeOutput])
 
   const stopRecordingInternal = useCallback((): RecordedLoop | null => {
     if (!isRecordingRef.current) return null
@@ -777,7 +795,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [])
 
   const startPlayback = useCallback(async () => {
-    if (loops.length === 0) return
+    if (loops.length === 0 || !await initializeOutput()) return
 
     // Ensure audio context is running
     if (Tone.getContext().state !== 'running') {
@@ -831,7 +849,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     // Sort events by time for proper scheduling
     allEvents.sort((a, b) => a.time - b.time)
     
-    const maxDuration = Math.max(...loops.map((l) => l.duration), 4)
+    const maxDuration = Math.max(...loops.map((l) => l.duration))
     console.log(`Loop duration: ${maxDuration}s, MIDI events: ${allEvents.length}`)
 
     // Start memo audio loops
@@ -887,7 +905,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     transport.start()
 
     setState((prev) => ({ ...prev, isPlaying: true }))
-  }, [loops, playDrumNote, releaseAllNotes])
+  }, [loops, playDrumNote, releaseAllNotes, initializeOutput])
 
   const stopPlayback = useCallback(() => {
     const transport = Tone.getTransport()
@@ -1104,6 +1122,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
         drumKitRef.current.kick.dispose()
         drumKitRef.current.snare.dispose()
         drumKitRef.current.hihat.dispose()
+        drumKitRef.current.effects.forEach(effect => effect.dispose())
       }
       if (loopPartRef.current) {
         loopPartRef.current.dispose()
@@ -1131,6 +1150,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     masterLoopDuration,
     loopProgress,
     initializeAudio,
+    initializeOutput,
     startRecording,
     stopRecording,
     startPlayback,
@@ -1154,5 +1174,6 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     updateLoops,
   }
 }
+
 
 

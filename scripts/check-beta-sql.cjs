@@ -9,7 +9,7 @@ async function main() {
   const a = '10000000-0000-4000-8000-000000000001', b = '10000000-0000-4000-8000-000000000002'
   const project = '20000000-0000-4000-8000-000000000001', track = '30000000-0000-4000-8000-000000000001'
   let checks = 0
-  const check = (actual, expected) => { assert.equal(actual, expected); checks++ }
+  const check = (actual, expected) => { assert.equal(typeof expected === "number" ? Number(actual) : actual, expected); checks++ }
   const denied = async fn => { await assert.rejects(fn); checks++ }
   await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
     CREATE SCHEMA auth; CREATE TABLE auth.users (id uuid PRIMARY KEY, email text);

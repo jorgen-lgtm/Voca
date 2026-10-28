@@ -30,7 +30,7 @@ export function TransportControls({
 
   return (
     <div className="flex flex-col items-center gap-4 mt-6 w-full max-w-sm">
-      <div className="flex items-center justify-center gap-4 w-full">
+      <div className="flex flex-wrap items-center justify-center gap-2 w-full">
         <motion.button
           onClick={() => setShowTempoSlider(!showTempoSlider)}
           whileHover={{ scale: 1.05 }}
@@ -40,11 +40,12 @@ export function TransportControls({
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="font-mono text-sm">{tempo} BPM</span>
+          <span className="font-mono text-sm whitespace-nowrap">{tempo} BPM</span>
         </motion.button>
 
         <motion.button
           onClick={onTogglePlay}
+          aria-label={isPlaying ? 'Pause playback' : 'Play loops'}
           disabled={!hasLoops}
           whileHover={{ scale: hasLoops ? 1.05 : 1 }}
           whileTap={{ scale: hasLoops ? 0.95 : 1 }}
@@ -134,4 +135,5 @@ export function TransportControls({
     </div>
   )
 }
+
 

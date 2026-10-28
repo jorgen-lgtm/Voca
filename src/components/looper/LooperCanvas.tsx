@@ -13,6 +13,7 @@ import { DrumPads } from './DrumPads'
 import { MiniKeyboard } from './MiniKeyboard'
 import { ExportModal } from './ExportModal'
 import { GenreStudio } from './GenreStudio'
+import { ResponsiveLoopStage } from './ResponsiveLoopStage'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
 import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
@@ -205,6 +206,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               onClick={() => setShowAIPanel(!showAIPanel)}
+              aria-label="AI"
               className={`p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
                 showAIPanel 
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' 
@@ -417,15 +419,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         const containerSize = Math.max(320, (maxRingRadius + strokeWidth) * 2 + 20)
         
         return (
-          <div 
-            className="relative flex items-center justify-center my-8"
-            style={{ 
-              width: containerSize, 
-              height: containerSize,
-              minWidth: 320,
-              minHeight: 320,
-            }}
-          >
+          <ResponsiveLoopStage size={containerSize}>
             <motion.div
               className="absolute rounded-full border border-gray-700/30"
               style={{ width: 320, height: 320 }}
@@ -489,7 +483,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               onInitialize={() => micEnabled || currentInstrument === 'memo' ? initializeAudio() : initializeOutput()}
               disabled={loopsAtLimit && state.isInitialized}
             />
-          </div>
+          </ResponsiveLoopStage>
         )
       })()}
 
@@ -537,6 +531,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       {currentInstrument !== 'drums' && !selectedLoop && (
         <div className="mb-6 relative z-10">
           <MiniKeyboard
+            key={currentInstrument}
             isRecording={state.isRecording}
             onNotePlay={(note) => triggerNote(note, 0.3)}
             onNoteRecord={(note) => recordKeyboardNote(note, 0.3)}
@@ -646,7 +641,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               )}
             </div>
           ) : (
-            <><span className="text-green-500">●</span> {loops.length}/{maxLoops} tracks • Click a ring to edit</>
+            <><span className="text-green-500">●</span> {loops.length}{Number.isFinite(maxLoops) ? `/${maxLoops}` : ''} tracks • Click a ring to edit</>
           )
         ) : (
           'Tap the button to start'

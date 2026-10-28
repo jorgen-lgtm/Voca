@@ -98,24 +98,24 @@ export function GenreStudio({ loops, tempo, duration, disabled, canAdd, onAdd }:
     <section aria-label="Genre och arrangemang" className="mb-4 space-y-3 border-b border-gray-700 pb-4">
       <h3 className="font-medium text-white text-sm">Genre och arrangemang</h3>
       <label className="block text-xs text-gray-300">Musikgenre
-        <select className={controls} value={genre} disabled={locked} onChange={e => { if (e.target.value === 'auto' || isMusicGenre(e.target.value)) { setGenre(e.target.value); setPreview(null) } }}>
+        <select aria-label="Musikgenre" className={controls} value={genre} disabled={locked} onChange={e => { if (e.target.value === 'auto' || isMusicGenre(e.target.value)) { setGenre(e.target.value); setPreview(null) } }}>
           <option value="auto">Låt extern AI välja</option>
           {Object.entries(MUSIC_GENRES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
       </label>
       <label className="block text-xs text-gray-300">Vad vill du göra?
-        <select className={controls} value={action} disabled={locked} onChange={e => { setAction(e.target.value === 'improve' ? 'improve' : 'generate'); setPreview(null) }}>
+        <select aria-label="Vad vill du göra?" className={controls} value={action} disabled={locked} onChange={e => { setAction(e.target.value === 'improve' ? 'improve' : 'generate'); setPreview(null) }}>
           <option value="generate">Skapa kompletterande spår</option>
           <option value="improve">Förbättra ett spår i vald genre</option>
         </select>
       </label>
       {sources.length > 0 && <label className="block text-xs text-gray-300">{action === 'improve' ? 'Spår att förbättra' : 'Musikaliskt underlag'}
-        <select className={controls} value={source?.id ?? ''} disabled={locked} onChange={e => { setSourceId(e.target.value); setPreview(null) }}>
+        <select aria-label={action === 'improve' ? 'Spår att förbättra' : 'Musikaliskt underlag'} className={controls} value={source?.id ?? ''} disabled={locked} onChange={e => { setSourceId(e.target.value); setPreview(null) }}>
           {sources.map((loop, i) => <option key={loop.id} value={loop.id}>{i + 1}. {getInstrumentConfig(loop.instrumentType).name} ({loop.notes.length} noter)</option>)}
         </select>
       </label>}
       {action === 'generate' && <label className="block text-xs text-gray-300">Nytt spår
-        <select className={controls} value={part} disabled={locked} onChange={e => { if (isArrangementPart(e.target.value)) { setPart(e.target.value); setPreview(null) } }}>
+        <select aria-label="Nytt spår" className={controls} value={part} disabled={locked} onChange={e => { if (isArrangementPart(e.target.value)) { setPart(e.target.value); setPreview(null) } }}>
           {Object.entries(ARRANGEMENT_PARTS).map(([id, config]) => <option key={id} value={id}>{config.label}</option>)}
         </select>
       </label>}

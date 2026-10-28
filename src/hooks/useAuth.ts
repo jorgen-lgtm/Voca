@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { shouldGrantProStatus, isAdminEmail } from '@/config/admin'
 import { FREE_BETA_MODE } from '@/config/beta'
@@ -23,7 +23,7 @@ export function useAuth() {
     profile: null,
     loading: true,
   })
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -35,41 +35,36 @@ export function useAuth() {
   }, [supabase])
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      let profile: UserProfile | null = null
-      if (session?.user) {
-        profile = await fetchProfile(session.user.id)
-      }
-
-      setState({
-        user: session?.user ?? null,
-        session,
-        profile,
-        loading: false,
-      })
-    }
-
-    getSession()
-
+    let disposed = false
+    let version = 0
+    // Supabase emits INITIAL_SESSION. Keep this callback synchronous: awaiting
+    // another Supabase query here can deadlock the auth session lock.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        let profile: UserProfile | null = null
-        if (session?.user) {
-          profile = await fetchProfile(session.user.id)
-        }
-
-        setState({
+      (_event, session) => {
+        const requestVersion = ++version
+        setState(prev => ({
           user: session?.user ?? null,
           session,
-          profile,
+          profile: session?.user.id === prev.user?.id ? prev.profile : null,
           loading: false,
-        })
+        }))
+        if (!session?.user) return
+        const user = session.user
+        setTimeout(() => {
+          if (disposed || version !== requestVersion) return
+          void fetchProfile(user.id).then(profile => {
+            if (!disposed && version === requestVersion) {
+              setState(prev => ({ ...prev, profile }))
+            }
+          }).catch(() => {
+            // Missing/unavailable profile must not prevent beta music creation.
+          })
+        }, 0)
       }
     )
-
     return () => {
+      disposed = true
+      version++
       subscription.unsubscribe()
     }
   }, [supabase, fetchProfile])

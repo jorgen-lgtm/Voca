@@ -67,6 +67,28 @@ async function main() {
   const limits = load('src/config/limits.ts')
   check(limits.getMaxLoops(false), Infinity); check(limits.getMaxProjects(false), Infinity); check(limits.getMaxExportsPerDay(false), Infinity); check(limits.shouldShowAds(false), false)
 
+  let authCallback, cleanupAuth, authState, resolveProfile, profileQueries = 0, unsubscribed = false
+  load('src/hooks/useAuth.ts', {
+    react: {
+      useState: initial => { authState = initial; return [initial, update => { authState = typeof update === 'function' ? update(authState) : update }] },
+      useMemo: fn => fn(), useCallback: fn => fn, useEffect: fn => { cleanupAuth = fn() },
+    },
+    '@/lib/supabase/client': { createClient: () => ({
+      auth: { onAuthStateChange: fn => { authCallback = fn; return { data: { subscription: { unsubscribe: () => { unsubscribed = true } } } } } },
+      from: () => ({ select: () => ({ eq: () => ({ single: () => { profileQueries++; return new Promise(resolve => { resolveProfile = resolve }) } }) }) }),
+    }) },
+  }).useAuth()
+  const session = { user: { id: 'user-a', email: 'a@test.invalid' } }
+  check(authCallback('INITIAL_SESSION', session), undefined) // synchronous, never waits on auth lock
+  check(profileQueries, 0); check(authState.loading, false)
+  await new Promise(resolve => setTimeout(resolve, 10))
+  check(profileQueries, 1)
+  authCallback('SIGNED_OUT', null)
+  resolveProfile({ data: { id: 'user-a', pro_status: true } })
+  await new Promise(resolve => setTimeout(resolve, 0))
+  check(authState.user, null); check(authState.profile, null)
+  cleanupAuth(); check(unsubscribed, true)
+
   const snapshot = load('src/lib/project-snapshot.ts')
   const loop = { id: 'track-a', instrumentType: 'piano', notes: [{ pitch: 60, startTime: 0, duration: .5, velocity: 100 }], duration: 2, volume: .4 }
   check(snapshot.buildProjectSnapshot('project', [loop])[0].id, loop.id)

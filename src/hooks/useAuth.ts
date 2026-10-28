@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { shouldGrantProStatus, isAdminEmail } from '@/config/admin'
+import { FREE_BETA_MODE } from '@/config/beta'
 import type { User, Session } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 
@@ -79,7 +80,7 @@ export function useAuth() {
 
   // Check Pro status - admins and users with pro_status get Pro features
   const isAdmin = isAdminEmail(state.user?.email)
-  const isPro = shouldGrantProStatus(state.user?.email, state.profile?.pro_status ?? false) || isAdmin
+  const isPro = FREE_BETA_MODE || shouldGrantProStatus(state.user?.email, state.profile?.pro_status ?? false) || isAdmin
 
   return {
     ...state,

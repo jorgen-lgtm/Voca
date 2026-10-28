@@ -517,6 +517,120 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     })
   }, [triggerNote])
 
+  const stopRecordingInternal = useCallback((): RecordedLoop | null => {
+    if (!isRecordingRef.current) return null
+
+    isRecordingRef.current = false
+    setState((prev) => ({ ...prev, isRecording: false }))
+    setLoopProgress(0)
+
+    if (masterVolumeRef.current) {
+      masterVolumeRef.current.volume.rampTo(0, 0.1)
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+    }
+
+    let recordingDuration = Tone.now() - recordingStartTimeRef.current
+
+    // MEMO MODE: Handle audio recording
+    if (currentInstrument === 'memo' && mediaRecorderRef.current) {
+      const recorder = mediaRecorderRef.current
+      
+      // Stop the recorder and wait for final data
+      recorder.stop()
+      
+      // Create the loop asynchronously when all data is collected
+      const loopId = crypto.randomUUID()
+      const config = getInstrumentConfig('memo')
+      
+      // Handle the recorded data
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        
+        console.log('Memo recording complete:', audioBlob.size, 'bytes')
+        
+        // Determine duration
+        const finalDuration = masterLoopDurationRef.current || recordingDuration
+        if (!masterLoopDurationRef.current) {
+          masterLoopDurationRef.current = recordingDuration
+          setMasterLoopDuration(recordingDuration)
+        }
+        
+        const memoLoop: RecordedLoop = {
+          id: loopId,
+          instrumentType: 'memo',
+          notes: [], // Memos don't have MIDI notes
+          duration: finalDuration,
+          color: config.color,
+          volume: 1,
+          audioBlob,
+          audioUrl,
+        }
+        
+        // Create audio element for playback
+        const audio = new Audio(audioUrl)
+        audio.loop = true
+        memoAudioElementsRef.current.set(loopId, audio)
+        
+        setLoops((prev) => [...prev, memoLoop])
+      }
+      
+      mediaRecorderRef.current = null
+      return null // Loop will be added asynchronously
+    }
+
+    if (lastNoteRef.current) {
+      const currentTime = Tone.now() - recordingStartTimeRef.current
+      const duration = currentTime - lastNoteRef.current.startTime
+      recordingNotesRef.current.push({
+        pitch: lastNoteRef.current.midi,
+        velocity: 100,
+        startTime: lastNoteRef.current.startTime,
+        duration: Math.max(duration, 0),
+      })
+    }
+
+    if (recordingNotesRef.current.length === 0) {
+      return null
+    }
+
+    // If this is the first loop, it sets the master duration
+    // Otherwise, use the master duration
+    const isFirstLoop = masterLoopDurationRef.current === null
+    if (isFirstLoop) {
+      // First loop - set it as master
+      masterLoopDurationRef.current = recordingDuration
+      setMasterLoopDuration(recordingDuration)
+    } else {
+      // Subsequent loops - use master duration
+      recordingDuration = masterLoopDurationRef.current!
+    }
+
+    // Preserve the sung melody: no forced scale, interval removal, or merging
+    // of different pitches. The tracker handles unstable input before recording.
+    const cleanedNotes = currentInstrument === 'drums'
+      ? [...recordingNotesRef.current]
+      : recordingNotesRef.current.filter(note => note.duration >= 0.08)
+
+    const config = getInstrumentConfig(currentInstrument)
+    
+    const newLoop: RecordedLoop = {
+      id: crypto.randomUUID(),
+      instrumentType: currentInstrument,
+      notes: cleanedNotes,
+      duration: recordingDuration,
+      color: config.color,
+      volume: 1,
+    }
+
+    setLoops((prev) => [...prev, newLoop])
+    
+    return newLoop
+  }, [currentInstrument])
+
   const startRecording = useCallback(async () => {
     const ready = micEnabledRef.current || currentInstrument === 'memo'
       ? await initializeAudio() : await initializeOutput()
@@ -634,121 +748,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
     }
 
     analyzeLoop()
-  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio, initializeOutput])
-
-  const stopRecordingInternal = useCallback((): RecordedLoop | null => {
-    if (!isRecordingRef.current) return null
-
-    isRecordingRef.current = false
-    setState((prev) => ({ ...prev, isRecording: false }))
-    setLoopProgress(0)
-
-    if (masterVolumeRef.current) {
-      masterVolumeRef.current.volume.rampTo(0, 0.1)
-    }
-
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-    }
-
-    let recordingDuration = Tone.now() - recordingStartTimeRef.current
-
-    // MEMO MODE: Handle audio recording
-    if (currentInstrument === 'memo' && mediaRecorderRef.current) {
-      const recorder = mediaRecorderRef.current
-      
-      // Stop the recorder and wait for final data
-      recorder.stop()
-      
-      // Create the loop asynchronously when all data is collected
-      const loopId = crypto.randomUUID()
-      const config = getInstrumentConfig('memo')
-      
-      // Handle the recorded data
-      recorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType })
-        const audioUrl = URL.createObjectURL(audioBlob)
-        
-        console.log('Memo recording complete:', audioBlob.size, 'bytes')
-        
-        // Determine duration
-        const finalDuration = masterLoopDurationRef.current || recordingDuration
-        if (!masterLoopDurationRef.current) {
-          masterLoopDurationRef.current = recordingDuration
-          setMasterLoopDuration(recordingDuration)
-        }
-        
-        const memoLoop: RecordedLoop = {
-          id: loopId,
-          instrumentType: 'memo',
-          notes: [], // Memos don't have MIDI notes
-          duration: finalDuration,
-          color: config.color,
-          volume: 1,
-          audioBlob,
-          audioUrl,
-        }
-        
-        // Create audio element for playback
-        const audio = new Audio(audioUrl)
-        audio.loop = true
-        memoAudioElementsRef.current.set(loopId, audio)
-        
-        setLoops((prev) => [...prev, memoLoop])
-      }
-      
-      mediaRecorderRef.current = null
-      return null // Loop will be added asynchronously
-    }
-
-    if (lastNoteRef.current) {
-      const currentTime = Tone.now() - recordingStartTimeRef.current
-      const duration = currentTime - lastNoteRef.current.startTime
-      recordingNotesRef.current.push({
-        pitch: lastNoteRef.current.midi,
-        velocity: 100,
-        startTime: lastNoteRef.current.startTime,
-        duration: Math.max(duration, 0),
-      })
-    }
-
-    if (recordingNotesRef.current.length === 0) {
-      return null
-    }
-
-    // If this is the first loop, it sets the master duration
-    // Otherwise, use the master duration
-    const isFirstLoop = masterLoopDurationRef.current === null
-    if (isFirstLoop) {
-      // First loop - set it as master
-      masterLoopDurationRef.current = recordingDuration
-      setMasterLoopDuration(recordingDuration)
-    } else {
-      // Subsequent loops - use master duration
-      recordingDuration = masterLoopDurationRef.current!
-    }
-
-    // Preserve the sung melody: no forced scale, interval removal, or merging
-    // of different pitches. The tracker handles unstable input before recording.
-    const cleanedNotes = currentInstrument === 'drums'
-      ? [...recordingNotesRef.current]
-      : recordingNotesRef.current.filter(note => note.duration >= 0.08)
-
-    const config = getInstrumentConfig(currentInstrument)
-    
-    const newLoop: RecordedLoop = {
-      id: crypto.randomUUID(),
-      instrumentType: currentInstrument,
-      notes: cleanedNotes,
-      duration: recordingDuration,
-      color: config.color,
-      volume: 1,
-    }
-
-    setLoops((prev) => [...prev, newLoop])
-    
-    return newLoop
-  }, [currentInstrument])
+  }, [state.isInitialized, state.isPlaying, currentInstrument, detectPitch, triggerNote, initializeAudio, initializeOutput, stopRecordingInternal])
 
   const stopRecording = useCallback((): RecordedLoop | null => {
     return stopRecordingInternal()

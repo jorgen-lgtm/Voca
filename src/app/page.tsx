@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LooperCanvas } from '@/components/looper'
@@ -9,6 +9,7 @@ import { useProjects } from '@/hooks/useProjects'
 import { AdBanner } from '@/components/ads'
 import { shouldShowAds } from '@/config/limits'
 import { FREE_BETA_MODE } from '@/config/beta'
+import { buildProjectSnapshot } from '@/lib/project-snapshot'
 import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
@@ -20,6 +21,9 @@ export default function HomePage() {
   const [pendingLoops, setPendingLoops] = useState<RecordedLoop[]>([])
   const [pendingTempo, setPendingTempo] = useState(120)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
+  const confirmingSaveRef = useRef(false)
   const router = useRouter()
 
   const handleSave = async (loops: RecordedLoop[], tempo: number) => {
@@ -28,6 +32,8 @@ export default function HomePage() {
       return
     }
 
+    setPendingProjectId(null)
+    setSnapshotError(null)
     setPendingLoops(loops)
     setPendingTempo(tempo)
     setProjectTitle(`Loop Session ${new Date().toLocaleDateString('sv-SE')}`)
@@ -35,11 +41,19 @@ export default function HomePage() {
   }
 
   const handleConfirmSave = async () => {
+    if (confirmingSaveRef.current) return
+    confirmingSaveRef.current = true
+    try {
     if (!projectTitle.trim()) return
 
-    const project = await createProject(projectTitle.trim(), pendingTempo, isPro)
+    try { buildProjectSnapshot('', pendingLoops) } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : 'Cannot save project')
+      return
+    }
+    const project = pendingProjectId ? { id: pendingProjectId } : await createProject(projectTitle.trim(), pendingTempo, isPro)
     if (project) {
-      const success = await saveLoopsToProject(project.id, pendingLoops)
+      setPendingProjectId(project.id)
+      const success = await saveLoopsToProject(project.id, pendingLoops, pendingTempo)
       if (success) {
         setSaveSuccess(true)
         setTimeout(() => {
@@ -48,6 +62,9 @@ export default function HomePage() {
           setProjectTitle('')
         }, 1500)
       }
+    }
+    } finally {
+      confirmingSaveRef.current = false
     }
   }
 
@@ -217,6 +234,7 @@ export default function HomePage() {
                       <span>{pendingTempo} BPM</span>
                     </div>
 
+                    {snapshotError && <p role="alert" className="text-red-300">{snapshotError}</p>}
                     {saveError && (
                       <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30">
                         <p className="text-sm text-red-300">{saveError}</p>
@@ -272,3 +290,4 @@ export default function HomePage() {
     </main>
   )
 }
+

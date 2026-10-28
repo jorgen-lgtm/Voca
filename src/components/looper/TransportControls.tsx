@@ -6,6 +6,7 @@ import { useState } from 'react'
 interface TransportControlsProps {
   isPlaying: boolean
   tempo: number
+  canSaveEmpty?: boolean
   hasLoops: boolean
   onTogglePlay: () => void
   onTempoChange: (tempo: number) => void
@@ -18,6 +19,7 @@ export function TransportControls({
   isPlaying,
   tempo,
   hasLoops,
+  canSaveEmpty = false,
   onTogglePlay,
   onTempoChange,
   onSave,
@@ -68,11 +70,11 @@ export function TransportControls({
 
         <motion.button
           onClick={onSave}
-          disabled={!hasLoops}
-          whileHover={{ scale: hasLoops ? 1.05 : 1 }}
-          whileTap={{ scale: hasLoops ? 0.95 : 1 }}
+          disabled={!(hasLoops || canSaveEmpty)}
+          whileHover={{ scale: (hasLoops || canSaveEmpty) ? 1.05 : 1 }}
+          whileTap={{ scale: (hasLoops || canSaveEmpty) ? 0.95 : 1 }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-colors ${
-            hasLoops
+            (hasLoops || canSaveEmpty)
               ? 'bg-gray-800/60 border-gray-700/50 text-gray-300 hover:text-white hover:border-green-500/50'
               : 'bg-gray-800/30 border-gray-700/30 text-gray-500 cursor-not-allowed'
           }`}
@@ -132,3 +134,4 @@ export function TransportControls({
     </div>
   )
 }
+

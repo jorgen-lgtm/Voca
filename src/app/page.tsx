@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProjects } from '@/hooks/useProjects'
 import { AdBanner } from '@/components/ads'
 import { shouldShowAds } from '@/config/limits'
+import { FREE_BETA_MODE } from '@/config/beta'
 import type { RecordedLoop } from '@/types/audio'
 
 export default function HomePage() {
@@ -75,9 +76,9 @@ export default function HomePage() {
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-medium">
               {user.email?.[0].toUpperCase()}
             </div>
-            {isPro && (
+            {(FREE_BETA_MODE || isPro) && (
               <span className="text-xs bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-2 py-0.5 rounded-full">
-                PRO
+                {FREE_BETA_MODE ? 'BETA' : 'PRO'}
               </span>
             )}
           </motion.button>
@@ -93,7 +94,7 @@ export default function HomePage() {
                   {user.email}
                 </div>
                 <div className="text-xs text-gray-400">
-                  {isPro ? 'Pro Member' : 'Free Plan'}
+                  {FREE_BETA_MODE ? 'Free Beta' : isPro ? 'Pro Member' : 'Free Plan'}
                 </div>
               </div>
               <div className="py-1">
@@ -103,7 +104,7 @@ export default function HomePage() {
                 >
                   My Projects
                 </button>
-                {!isPro && (
+                {!FREE_BETA_MODE && !isPro && (
                   <button
                     onClick={() => router.push('/upgrade')}
                     className="w-full px-4 py-2 text-left text-sm text-yellow-400 hover:bg-gray-700/50"
@@ -139,7 +140,7 @@ export default function HomePage() {
       <LooperCanvas onSave={handleSave} isPro={isPro} />
 
       {/* Ad Banner for free users */}
-      {shouldShowAds(isPro) && (
+      {!FREE_BETA_MODE && shouldShowAds(isPro) && (
         <AdBanner isPro={isPro} position="bottom" />
       )}
 
@@ -219,7 +220,7 @@ export default function HomePage() {
                     {saveError && (
                       <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30">
                         <p className="text-sm text-red-300">{saveError}</p>
-                        {saveError.includes('limit') && !isPro && (
+                        {saveError.includes('limit') && !FREE_BETA_MODE && !isPro && (
                           <button
                             onClick={() => router.push('/upgrade')}
                             className="mt-2 text-xs font-medium text-purple-400 hover:text-purple-300"

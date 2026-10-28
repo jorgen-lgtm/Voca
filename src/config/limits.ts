@@ -1,3 +1,5 @@
+import { FREE_BETA_MODE } from './beta'
+
 // Free tier limits
 export const FREE_LIMITS = {
   MAX_CONCURRENT_LOOPS: 4,  // Free users can have 4 loops at a time
@@ -15,19 +17,19 @@ export const PRO_LIMITS = {
 } as const
 
 export function getMaxLoops(isPro: boolean): number {
-  return isPro ? PRO_LIMITS.MAX_CONCURRENT_LOOPS : FREE_LIMITS.MAX_CONCURRENT_LOOPS
+  return (FREE_BETA_MODE || isPro) ? PRO_LIMITS.MAX_CONCURRENT_LOOPS : FREE_LIMITS.MAX_CONCURRENT_LOOPS
 }
 
 export function getMaxProjects(isPro: boolean): number {
-  return isPro ? PRO_LIMITS.MAX_PROJECTS : FREE_LIMITS.MAX_PROJECTS
+  return (FREE_BETA_MODE || isPro) ? PRO_LIMITS.MAX_PROJECTS : FREE_LIMITS.MAX_PROJECTS
 }
 
 export function getMaxExportsPerDay(isPro: boolean): number {
-  return isPro ? PRO_LIMITS.MAX_EXPORT_PER_DAY : FREE_LIMITS.MAX_EXPORT_PER_DAY
+  return (FREE_BETA_MODE || isPro) ? PRO_LIMITS.MAX_EXPORT_PER_DAY : FREE_LIMITS.MAX_EXPORT_PER_DAY
 }
 
 export function shouldShowAds(isPro: boolean): boolean {
-  return isPro ? PRO_LIMITS.SHOW_ADS : FREE_LIMITS.SHOW_ADS
+  return (FREE_BETA_MODE || isPro) ? PRO_LIMITS.SHOW_ADS : FREE_LIMITS.SHOW_ADS
 }
 
 // Pro benefits for marketing
@@ -39,3 +41,4 @@ export const PRO_BENEFITS = [
   { icon: '🎧', title: 'AI-producent', description: 'Full tillgång till Studio AI' },
   { icon: '⚡', title: 'Prioriterad support', description: 'Snabb hjälp när du behöver' },
 ] as const
+

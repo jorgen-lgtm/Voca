@@ -5,7 +5,15 @@ function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit' })
   if (result.status !== 0) process.exit(result.status || 1)
 }
-run('npm', ['install', '--no-save', '--package-lock=false', '--ignore-scripts', '@electric-sql/pglite@0.3.14'])
+run('npm', ['install', '--no-save', '--package-lock=false', '--ignore-scripts', '--include=dev', '@electric-sql/pglite@0.3.14'])
+const audit = spawnSync('npm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+try {
+  const data = JSON.parse(audit.stdout)
+  console.log('AUDIT_SUMMARY', JSON.stringify(data.metadata?.vulnerabilities))
+  for (const [name, issue] of Object.entries(data.vulnerabilities || {})) {
+    if (['high', 'critical'].includes(issue.severity)) console.log('AUDIT_PACKAGE', name, issue.severity, 'direct=' + issue.isDirect, 'fix=' + JSON.stringify(issue.fixAvailable), 'via=' + JSON.stringify(issue.via))
+  }
+} catch { console.log('AUDIT_UNAVAILABLE') }
 run(process.execPath, ['scripts/check-beta.cjs'])
 run(process.execPath, ['scripts/check-voice-pitch.cjs', '--with-detector'])
 run(process.execPath, ['scripts/check-beta-sql.cjs'])

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { authorizeAiRequest } from '@/lib/ai-spend-guard'
 
 function getOpenAI() {
   return new OpenAI({
@@ -17,14 +18,18 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData()
-    const audioFile = formData.get('audio') as File
-    
-    if (!audioFile) {
+    const audioFile = formData.get('audio')
+
+    if (!(audioFile instanceof File) || audioFile.size === 0 || audioFile.size > 1_000_000
+      || !['audio/webm', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/x-m4a'].includes(audioFile.type)) {
       return NextResponse.json(
-        { error: 'No audio file provided' },
+        { error: 'Invalid audio: supported audio format up to 1 MB required' },
         { status: 400 }
       )
     }
+
+    const blocked = await authorizeAiRequest('transcription')
+    if (blocked) return blocked
 
     const openai = getOpenAI()
     const transcription = await openai.audio.transcriptions.create({

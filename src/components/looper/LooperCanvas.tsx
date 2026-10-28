@@ -12,6 +12,7 @@ import { PitchDisplay } from './PitchDisplay'
 import { DrumPads } from './DrumPads'
 import { MiniKeyboard } from './MiniKeyboard'
 import { ExportModal } from './ExportModal'
+import { GenreStudio } from './GenreStudio'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
 import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
@@ -251,7 +252,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             exit={{ opacity: 0, y: -20 }}
             className="absolute top-24 left-4 right-4 z-20 flex justify-center"
           >
-            <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full">
+            <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full max-h-[75dvh] overflow-y-auto">
               {/* Producer Header */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -265,6 +266,15 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                 </div>
                 <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white p-1">✕</button>
               </div>
+
+              <GenreStudio
+                loops={loops}
+                tempo={state.tempo}
+                duration={masterLoopDuration || (60 / state.tempo) * 8}
+                disabled={state.isPlaying || state.isRecording}
+                canAdd={canAddMoreLoops}
+                onAdd={loop => updateLoops([...loops, loop])}
+              />
 
               {/* Producer Message */}
               <div className="mb-3 p-3 rounded-xl bg-gray-900/50 border border-gray-700/50">
@@ -645,4 +655,5 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     </div>
   )
 }
+
 

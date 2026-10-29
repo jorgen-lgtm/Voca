@@ -621,7 +621,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Status */}
       <motion.div
-        className="absolute bottom-4 text-center text-xs text-gray-500"
+        className="mt-4 mb-4 text-center text-xs text-gray-500"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}

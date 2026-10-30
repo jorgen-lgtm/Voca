@@ -40,10 +40,18 @@ eight validated MIDI tuples and 300 output tokens. There are no SDK retries and
 the provider timeout is 15 seconds. Drum pitches are restricted to the kit's MIDI
 mapping. Truncated, wrong-genre or malformed responses are rejected.
 
-The production AI ledger has not been installed. Activation still needs approval
-of ledger/config changes and verification of provider hard spending controls,
-the existing 200 SEK/month ceiling and FX/tax/billing headroom. No paid provider
-request, key change or budget change is part of this implementation. Transcription
+The production AI ledger was inspected on 2026-10-30: both tables have RLS,
+no anon/authenticated table access, and only service_role can execute the reservation
+function. The user requested external AI with a USD 20 monthly application budget.
+Activation uses AI_MAX_MONTHLY_MICROUSD=20000000 and AI_SPEND_GUARD_ENABLED=true
+in production; no keys are retrieved or changed. The application reserves USD 0.02
+before each attempt (at most 1,000 monthly attempts across both endpoints), and
+allows 10 melody/genre requests per verified user per UTC day. Failed attempts
+retain reservations. This controls this application, not other uses of the provider
+key or the provider invoice. Provider-side project limits cannot be independently
+verified through the connected tools. GPT-4o documentation inspected on this date
+lists USD 2.50/million input and USD 10/million output tokens; bounded MIDI input
+and 300 output tokens fit within the conservative reservation. Transcription
 remains disabled. Aborting the browser wait does not refund a server reservation
 or guarantee that an already-started provider request is canceled.
 

@@ -38,6 +38,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     state,
     currentPitch,
     audioLevel,
+    audioError,
     lastDrumType,
     loops,
     currentInstrument,
@@ -153,6 +154,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen p-4">
+      {audioError && <p role="alert" className="relative z-30 mt-16 mb-3 rounded-lg bg-red-950 p-3 text-sm text-red-100">{audioError}</p>}
       {/* Header - Left side */}
       <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
         <motion.div
@@ -204,7 +206,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               onClick={() => setShowAIPanel(!showAIPanel)}
-              className={`p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
+              aria-label="AI"
+              className={`min-h-11 min-w-11 p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center justify-center gap-1.5 ${
                 showAIPanel 
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' 
                   : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
@@ -645,4 +648,5 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     </div>
   )
 }
+
 

@@ -8,6 +8,7 @@ import { LoopRing } from './LoopRing'
 import { LoopEditor } from './LoopEditor'
 import { InstrumentSelector } from './InstrumentSelector'
 import { TransportControls } from './TransportControls'
+import { ResponsiveLoopStage } from './ResponsiveLoopStage'
 import { PitchDisplay } from './PitchDisplay'
 import { DrumPads } from './DrumPads'
 import { MiniKeyboard } from './MiniKeyboard'
@@ -410,15 +411,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         const containerSize = Math.max(320, (maxRingRadius + strokeWidth) * 2 + 20)
         
         return (
-          <div 
-            className="relative flex items-center justify-center my-8"
-            style={{ 
-              width: containerSize, 
-              height: containerSize,
-              minWidth: 320,
-              minHeight: 320,
-            }}
-          >
+          <ResponsiveLoopStage size={containerSize}>
             <motion.div
               className="absolute rounded-full border border-gray-700/30"
               style={{ width: 320, height: 320 }}
@@ -482,7 +475,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               onInitialize={() => micEnabled || currentInstrument === 'memo' ? initializeAudio() : initializeOutput()}
               disabled={loopsAtLimit && state.isInitialized}
             />
-          </div>
+          </ResponsiveLoopStage>
         )
       })()}
 
@@ -619,7 +612,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Status */}
       <motion.div
-        className="absolute bottom-4 text-center text-xs text-gray-500"
+        className="mt-4 mb-4 text-center text-xs text-gray-500"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}

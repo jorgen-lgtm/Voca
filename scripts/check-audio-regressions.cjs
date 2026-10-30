@@ -79,7 +79,7 @@ async function main(){
   const f=fixture();let engine=f.h.current.engine
   await engine.startPlayback();f.fire();check(f.triggers.length,1)
   const piano=f.triggers[0].node
-  check(piano.volume.value,-6);check(f.triggers[0].args[3],levels.noteGain(100,.5))
+  check(piano.maxPolyphony,12);check(piano.volume.value,-6);check(f.triggers[0].args[3],levels.noteGain(100,.5))
   const master=f.nodes.find(n=>n.kind==='Volume')
   check(master.target.kind,'Limiter');check(master.target.args[0],-1)
   const count=f.nodes.filter(n=>n.kind!=='Part').length
@@ -124,7 +124,7 @@ async function main(){
     const volume=record.nodes.find(n=>n.kind==='Volume')
     check(volume.volume.value,mic?-6:0)
     await record.h.current.engine.startPlayback();check(volume.volume.value,mic?-6:0)
-    record.setNow(1);record.h.current.engine.recordKeyboardNote(60,.3);record.setNow(2)
+    record.setNow(1);const before=record.triggers.length;await record.h.current.engine.triggerNote(60,.3);record.h.current.engine.recordKeyboardNote(60,.3);check(record.triggers.length,before+1);record.setNow(2)
     record.h.current.engine.stopRecording();check(volume.volume.value,0)
     record.h.cleanup()
   }

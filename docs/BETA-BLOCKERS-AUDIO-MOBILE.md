@@ -60,8 +60,25 @@ after editing/saving the title. Verify that the title header never covers AI.
 
 ## Test scope and release decision
 
-Run `node scripts/check-audio-regressions.cjs` (55 checks at implementation time),
+Run `node scripts/check-audio-regressions.cjs` (58 checks at implementation time),
 existing beta regressions, lint and Next/TypeScript build. Browser checks that mock
 Supabase establish UI/lifecycle behavior, not real signup or database persistence.
 Keep the reports as external-beta blockers until the required live-account and
 physical-device acceptance tests pass. No physical iPhone result is claimed here.
+
+## Automated browser acceptance, 2026-10-30
+
+Eleven Chromium flows passed using the built app, mocked Supabase HTTP API and
+real WebAudio measurements: opened-project save/resave, failed save, suspended
+context recovery, first save from home, long title editing, and reachable 44px AI
+controls without horizontal overflow at 320/375/390 portrait and 844 landscape.
+Initial piano measured RMS 0.0468, peak 0.1900 at fixture track volume 0.6.
+There were zero JavaScript errors. This is not a physical-device loudness test.
+
+The additional narrow-screen overflow is fixed with a scaled responsive loop
+stage and wrapping transport controls. Keyboard recording now previews each note
+once rather than triggering both preview and capture callbacks. Piano polyphony
+is 12 to accommodate chord release tails. The source recording is unchanged.
+
+Physical iPhone Safari, real microphone listening and live-account persistence
+acceptance remain outstanding. Do not represent these as completed in a film.

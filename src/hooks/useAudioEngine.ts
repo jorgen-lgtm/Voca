@@ -116,7 +116,7 @@ function createInstrumentSynth(type: InstrumentType, masterVolume: Tone.Volume, 
       const pianoFilter = new Tone.Filter({ type: 'lowpass', frequency: 5200, Q: 0.5 }).connect(reverb)
       effects.push(pianoFilter)
       const synth = new Tone.PolySynth(Tone.Synth).connect(pianoFilter)
-      synth.maxPolyphony = 6
+      synth.maxPolyphony = 12
       synth.set({
         oscillator: { type: 'triangle' },
         envelope: { attack: 0.002, decay: 1.5, sustain: 0.04, release: 1.3 },
@@ -571,9 +571,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
   }, [triggerDrumHit])
 
   const recordKeyboardNote = useCallback((midiNote: number, duration: number = 0.3) => {
-    // Play the note
-    triggerNote(midiNote, duration)
-    
+    // MiniKeyboard previews via onNotePlay; capture only once here.
     // Record if recording
     if (!isRecordingRef.current) return
     
@@ -585,7 +583,7 @@ export function useAudioEngine({ tempo = 120, loopBars = 4, initialLoops = [] }:
       startTime: currentTime,
       duration: duration,
     })
-  }, [triggerNote])
+  }, [])
 
   const stopRecordingInternal = useCallback((): RecordedLoop | null => {
     if (!isRecordingRef.current) return null

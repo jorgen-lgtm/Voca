@@ -12,6 +12,8 @@ import { PitchDisplay } from './PitchDisplay'
 import { DrumPads } from './DrumPads'
 import { MiniKeyboard } from './MiniKeyboard'
 import { ExportModal } from './ExportModal'
+import { GenreStudio } from './GenreStudio'
+import { ResponsiveLoopStage } from './ResponsiveLoopStage'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { useAIAssistant } from '@/hooks/useAIAssistant'
 import { getMaxLoops, FREE_LIMITS } from '@/config/limits'
@@ -38,6 +40,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     state,
     currentPitch,
     audioLevel,
+    audioError,
     lastDrumType,
     loops,
     currentInstrument,
@@ -153,6 +156,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen p-4">
+      {audioError && <p role="alert" className="relative z-30 mt-16 mb-3 rounded-lg bg-red-950 p-3 text-sm text-red-100">{audioError}</p>}
       {/* Header - Left side */}
       <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
         <motion.div
@@ -204,7 +208,8 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               onClick={() => setShowAIPanel(!showAIPanel)}
-              className={`p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
+              aria-label="AI"
+              className={`min-h-11 min-w-11 p-2.5 sm:px-3 sm:py-1.5 text-sm rounded-full transition-colors flex items-center justify-center gap-1.5 ${
                 showAIPanel 
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' 
                   : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
@@ -251,7 +256,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
             exit={{ opacity: 0, y: -20 }}
             className="absolute top-24 left-4 right-4 z-20 flex justify-center"
           >
-            <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full">
+            <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl border border-purple-500/30 p-4 max-w-sm w-full max-h-[75dvh] overflow-y-auto">
               {/* Producer Header */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -265,6 +270,15 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
                 </div>
                 <button onClick={() => setShowAIPanel(false)} className="text-gray-400 hover:text-white p-1">✕</button>
               </div>
+
+              <GenreStudio
+                loops={loops}
+                tempo={state.tempo}
+                duration={masterLoopDuration || (60 / state.tempo) * 8}
+                disabled={state.isPlaying || state.isRecording}
+                canAdd={canAddMoreLoops}
+                onAdd={loop => updateLoops([...loops, loop])}
+              />
 
               {/* Producer Message */}
               <div className="mb-3 p-3 rounded-xl bg-gray-900/50 border border-gray-700/50">
@@ -407,15 +421,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
         const containerSize = Math.max(320, (maxRingRadius + strokeWidth) * 2 + 20)
         
         return (
-          <div 
-            className="relative flex items-center justify-center my-8"
-            style={{ 
-              width: containerSize, 
-              height: containerSize,
-              minWidth: 320,
-              minHeight: 320,
-            }}
-          >
+          <ResponsiveLoopStage size={containerSize}>
             <motion.div
               className="absolute rounded-full border border-gray-700/30"
               style={{ width: 320, height: 320 }}
@@ -479,7 +485,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               onInitialize={() => micEnabled || currentInstrument === 'memo' ? initializeAudio() : initializeOutput()}
               disabled={loopsAtLimit && state.isInitialized}
             />
-          </div>
+          </ResponsiveLoopStage>
         )
       })()}
 
@@ -527,6 +533,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
       {currentInstrument !== 'drums' && !selectedLoop && (
         <div className="mb-6 relative z-10">
           <MiniKeyboard
+            key={currentInstrument}
             isRecording={state.isRecording}
             onNotePlay={(note) => triggerNote(note, 0.3)}
             onNoteRecord={(note) => recordKeyboardNote(note, 0.3)}
@@ -616,7 +623,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
 
       {/* Status */}
       <motion.div
-        className="absolute bottom-4 text-center text-xs text-gray-500"
+        className="mt-4 mb-4 text-center text-xs text-gray-500"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}
@@ -636,7 +643,7 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
               )}
             </div>
           ) : (
-            <><span className="text-green-500">●</span> {loops.length}/{maxLoops} tracks • Click a ring to edit</>
+            <><span className="text-green-500">●</span> {loops.length}{Number.isFinite(maxLoops) ? `/${maxLoops}` : ''} tracks • Click a ring to edit</>
           )
         ) : (
           'Tap the button to start'
@@ -645,4 +652,5 @@ export function LooperCanvas({ onSave, isPro = false, initialLoops, initialTempo
     </div>
   )
 }
+
 

@@ -81,6 +81,7 @@ export function RecordButton({
 
       <motion.button
         onPointerUp={handleInteraction}
+        aria-label={isRecording ? 'Stop recording' : 'Start recording'}
         disabled={isInitializing || (disabled && !isRecording)}
         className={`relative w-28 h-28 rounded-full flex items-center justify-center touch-none select-none ${
           isInitializing
@@ -172,3 +173,4 @@ export function RecordButton({
     </div>
   )
 }
+

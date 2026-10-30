@@ -217,6 +217,7 @@ export function useProjects() {
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, title } : p))
     )
+    setCurrentProject(prev => prev?.id === projectId ? { ...prev, title } : prev)
     setLoading(false)
     return true
   }, [supabase])
@@ -250,4 +251,5 @@ export function useProjects() {
 function getInstrumentColor(type: InstrumentType): string {
   return getInstrumentConfig(type).color
 }
+
 

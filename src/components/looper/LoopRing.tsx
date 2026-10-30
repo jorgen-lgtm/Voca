@@ -120,6 +120,15 @@ export function LoopRing({
 
         {/* Invisible hit area - wider stroke for easier tapping */}
         <circle
+          role="button"
+          tabIndex={0}
+          aria-label={`Edit ${getInstrumentConfig(loop.instrumentType).name} track ${index + 1}`}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSelect()
+            }
+          }}
           cx={baseRadius + strokeWidth}
           cy={baseRadius + strokeWidth}
           r={baseRadius}
@@ -177,4 +186,5 @@ export function LoopRing({
     </motion.div>
   )
 }
+
 
